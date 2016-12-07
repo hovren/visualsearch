@@ -9,23 +9,26 @@ import cv2
 import h5py
 import numpy as np
 import scipy.cluster
+import sklearn.cluster
 
 import tqdm
 
-from vsim_common import load_SIFT_descriptors, kmeans_score
+from vsim_common import load_SIFT_descriptors, kmeans_score, save_vocabulary
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('directory')
     parser.add_argument('out')
     parser.add_argument('size', type=int)
-    parser.add_argument('--kmeans', choices=['opencv', 'scipy'], default='scipy')
+    parser.add_argument('--kmeans', choices=['opencv', 'scipy', 'sklearn'], default='scipy')
     args = parser.parse_args()
     
     out_path = os.path.expanduser(args.out)
     sift_files = glob.glob(os.path.join(os.path.expanduser(args.directory), '*.sift.h5'))
 
     sift_descriptors = []
+    print('Loading SIFT descriptors...')
     for path in tqdm.tqdm(sift_files):
         desc = load_SIFT_descriptors(path)
         sift_descriptors.append(desc)
@@ -55,6 +58,13 @@ if __name__ == "__main__":
             if iter_score < score:
                 centroids = iter_centroids
                 score = iter_score
+
+    elif args.kmeans == 'sklearn':
+        kmeans = sklearn.cluster.KMeans(clusters, init='random', n_init=attempts, max_iter=iterations, n_jobs=-1, copy_x=False)
+        kmeans.fit(data)
+        score = kmeans.inertia_
+        labels = kmeans.labels_
+        centroids = kmeans.cluster_centers_
                 
     elapsed = time.time() - t0
     
