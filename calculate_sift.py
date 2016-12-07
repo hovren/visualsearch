@@ -9,9 +9,7 @@ import numpy as np
 
 import tqdm
 
-def sift_file_for_image(image_path):
-    assert image_path.endswith('.jpg')
-    return os.path.splitext(image_path)[0] + '.sift.h5'
+from vsim_common import sift_file_for_image
 
 def find_missing(directory):
     def match(filename):

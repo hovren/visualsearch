@@ -12,16 +12,7 @@ import scipy.cluster
 
 import tqdm
 
-def load_SIFT_descriptors(path):
-    with h5py.File(path, 'r') as f:
-        return f['descriptors'].value
-        
-def save_vocabulary(means, path):
-    with h5py.File(path, 'w') as f:
-        f['vocabulary'] = means
-        
-def kmeans_score(data, centroids, labels):
-    return sum(np.linalg.norm(x - centroids[l])**2 for x, l in zip(data, labels))
+from vsim_common import load_SIFT_descriptors, kmeans_score
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
