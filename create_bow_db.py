@@ -43,4 +43,6 @@ if __name__ == "__main__":
             assert key not in f.keys()
             f[key] = document_word_freq
 
+        f['vocabulary'] = vocabulary
+
     print('Wrote database to', out_file)
