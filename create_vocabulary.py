@@ -5,15 +5,26 @@ import glob
 import os
 import time
 
-import cv2
 import h5py
 import numpy as np
 import scipy.cluster
-import sklearn.cluster
-
 import tqdm
 
 from vsim_common import load_SIFT_descriptors, kmeans_score, save_vocabulary
+
+# KMeans providers
+kmeans_providers = ['scipy'] # Scipy should always be installed
+try:
+    import cv2
+    kmeans_providers.append('opencv')
+except ImportError:
+    pass
+
+try:
+    import sklearn.cluster
+    kmeans_providers.append('sklearn')
+except ImportError:
+    pass
 
 
 if __name__ == "__main__":
@@ -21,7 +32,7 @@ if __name__ == "__main__":
     parser.add_argument('directory')
     parser.add_argument('out')
     parser.add_argument('size', type=int)
-    parser.add_argument('--kmeans', choices=['opencv', 'scipy', 'sklearn'], default='scipy')
+    parser.add_argument('--kmeans', choices=kmeans_providers, default='scipy')
     args = parser.parse_args()
     
     out_path = os.path.expanduser(args.out)
@@ -49,6 +60,7 @@ if __name__ == "__main__":
         termcrit = (cv2.TERM_CRITERIA_MAX_ITER, iterations, eps)
         score, labels, centroids = cv2.kmeans(data, clusters, None, termcrit, attempts, cv2.KMEANS_RANDOM_CENTERS)
         print('Scipy score:', kmeans_score(data, centroids, labels))
+
     elif args.kmeans == 'scipy':
         score = np.inf
         centroids = None
