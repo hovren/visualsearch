@@ -72,7 +72,8 @@ if __name__ == "__main__":
                 score = iter_score
 
     elif args.kmeans == 'sklearn':
-        kmeans = sklearn.cluster.KMeans(clusters, init='random', n_init=attempts, max_iter=iterations, n_jobs=-1, copy_x=False)
+        #kmeans = sklearn.cluster.KMeans(clusters, init='random', n_init=attempts, max_iter=iterations, n_jobs=-1, copy_x=False)
+        kmeans = sklearn.cluster.MiniBatchKMeans(clusters, init='random', batch_size=1000, n_init=attempts, max_iter=iterations)
         kmeans.fit(data)
         score = kmeans.inertia_
         labels = kmeans.labels_
