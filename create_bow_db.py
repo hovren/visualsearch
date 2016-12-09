@@ -1,17 +1,23 @@
 #!/usr/bin/env python
 
 import argparse
-import collections
+import multiprocessing
 import glob
 import os
 import sys
+from itertools import repeat
 
 import h5py
-import numpy as np
-import scipy.spatial
 import tqdm
 
 from vsim_common import load_vocabulary, load_SIFT_descriptors, descriptors_to_bow_vector
+
+def compute_bow_vector(args):
+    path, vocabulary = args
+    descriptors = load_SIFT_descriptors(path)
+    document_word_freq = descriptors_to_bow_vector(descriptors, vocabulary)
+    key = os.path.basename(path).split('.sift.h5')[0]
+    return key, document_word_freq
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -35,13 +41,11 @@ if __name__ == "__main__":
     sift_files = glob.glob(os.path.join(directory, '*.sift.h5'))
     print('{} has {:d} SIFT files'.format(directory, len(sift_files)))
 
-    with h5py.File(out_file, 'w') as f:
-        for path in tqdm.tqdm(sift_files):
-            descriptors = load_SIFT_descriptors(path)
-            document_word_freq = descriptors_to_bow_vector(descriptors, vocabulary)
-            key = os.path.basename(path).split('.sift.h5')[0]
+    with h5py.File(out_file, 'w') as f, multiprocessing.Pool() as pool, tqdm.tqdm(total=len(sift_files)) as pbar:
+        for key, document_word_freq in pool.imap_unordered(compute_bow_vector, zip(sift_files, repeat(vocabulary))):
             assert key not in f.keys()
             f[key] = document_word_freq
+            pbar.update(1)
 
         f['vocabulary'] = vocabulary
 
