@@ -1,15 +1,16 @@
 import sys
 import os
 import collections
+import threading
 
 import cv2
 import numpy as np
 
 from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, \
-    QSizePolicy, QGraphicsView, QGraphicsScene, QRubberBand, QDialog, QDialogButtonBox, QDialogButtonBox, QErrorMessage
+    QSizePolicy, QGraphicsView, QGraphicsScene, QRubberBand, QDialog, QDialogButtonBox, QDialogButtonBox, QErrorMessage, QProgressDialog
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5 import QtCore, Qt, QtGui
-from PyQt5.Qt import QSize, QRect, QRectF, QPoint, QPointF, QThread
+from PyQt5.Qt import QSize, QRect, QRectF, QPoint, QPointF, QThread, pyqtSignal, pyqtSlot
 
 from vsim_common import load_SIFT_file, sift_file_for_image, inside_roi
 
@@ -19,10 +20,11 @@ def filter_roi(imd):
     rx, ry, rw, rh = [int(v) for v in imd.roi]
     im = imd.image[ry:ry+rh, rx:rx+rw]
     valid = [i for i, kp in enumerate(imd.keypoints) if inside_roi(kp, imd.roi)]
-    kps = [kp for i, kp in enumerate(imd.keypoints) if i in valid]
-    for kp in kps:
+    # We are modifying the keypoints, so they must be copied first
+    def new_roi_keypoint(kp):
         x, y = kp.pt
-        kp.pt = (x - rx, y - ry)
+        return cv2.KeyPoint(x - rx, y - ry, kp.size, kp.angle, kp.response, kp.octave, kp.class_id)
+    kps = [new_roi_keypoint(kp) for i, kp in enumerate(imd.keypoints) if i in valid]
     des = imd.descriptors[valid]
     return kps, des, im
 
@@ -155,6 +157,61 @@ class ImageWithROI(ImageWidget):
             raise ImageWidgetError
 
 
+class MatcherWorker(QThread):
+    success_signal = pyqtSignal(np.ndarray)
+    fail_signal = pyqtSignal(str)
+    match_progress = pyqtSignal(int, str)
+
+    def __init__(self, imdata1, imdata2, parent=None):
+        super().__init__(parent)
+        self.imd1 = imdata1
+        self.imd2 = imdata2
+        self.log_message('Keypoints: {} and {}'.format(len(self.imd1.keypoints), len(self.imd2.keypoints)))
+
+    def log_message(self, text):
+        tid = threading.current_thread().getName()
+        print('Thread[{}]: {}'.format(tid, text))
+
+    def run(self):
+        self.log_message("Starting")
+        self.log_message('Keypoints: {} and {}'.format(len(self.imd1.keypoints), len(self.imd2.keypoints)))
+        self.log_message("Image 1 ROI: {}".format(self.imd1.roi))
+        self.log_message("Image 2 ROI: {}".format(self.imd2.roi))
+        self.match_progress.emit(0, "Filtering Image 1")
+        kps1, des1, im1_roi = filter_roi(self.imd1)
+        self.log_message("Image 1 had {:d} keypoints within ROI".format(len(kps1)))
+        self.log_message("Filtered 1")
+        self.match_progress.emit(20, "Filtering Image 2")
+        kps2, des2, im2_roi = filter_roi(self.imd2)
+        self.log_message("Image 2 had {:d} keypoints within ROI".format(len(kps2)))
+        self.log_message("Filtered 2")
+
+        self.match_progress.emit(40, "Matching features")
+        matcher = cv2.BFMatcher()
+        matches = matcher.knnMatch(des1, des2, k=2)
+        self.log_message("Got {:d} matches".format(len(matches)))
+        if not matches:
+            self.fail_signal.emit("Found no matches")
+
+        def good_match(m1, m2, max_distance=np.inf):
+            assert m1.distance <= m2.distance, "Not ordered, distances: {} and {}".format(m1.distance, m2.distance)
+            return (m1.distance < 0.75 * m2.distance) and m1.distance < max_distance
+
+        ratio_matches = [m1 for m1, m2 in matches if good_match(m1, m2)]
+        self.log_message('Ratio test reduced to {:d} matches'.format(len(ratio_matches)))
+
+        if ratio_matches:
+            self.log_message("Drawing")
+            self.match_progress.emit(75, "Drawing result")
+            flags = cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS | cv2.DRAW_MATCHES_FLAGS_NOT_DRAW_SINGLE_POINTS
+            cmp_image = cv2.drawMatches(im1_roi, kps1, im2_roi, kps2, ratio_matches, np.array([]), flags=flags)
+            self.log_message("Done drawing")
+            self.success_signal.emit(cmp_image)
+        else:
+            self.log_message("Nothing to draw")
+            self.fail_signal.emit("No matches to draw")
+        self.match_progress.emit(100, "Done")
+        self.log_message("Exiting")
 
 
 class ImageSelectDialog(QDialog):
@@ -250,29 +307,34 @@ class MatchComparerWindow(QMainWindow):
         except ImageWidgetError:
             return
 
-        print('Filtering')
-        kps1, des1, im1_roi = filter_roi(imdata1)
-        kps2, des2, im2_roi = filter_roi(imdata2)
+        worker = MatcherWorker(imdata1, imdata2, parent=self)
+        worker.success_signal.connect(self.image.set_array)
+        worker.fail_signal.connect(self.image.setText)
 
-        print('Running matcher')
-        matcher = cv2.BFMatcher()
-        matches = matcher.knnMatch(des1, des2, k=2)
-        print('Found {:d} knn-matches'.format(len(matches)))
+        if True:
+            progress = QProgressDialog(parent=self)
+            def progress_update(value, text):
+                progress.setValue(value)
+                progress.setLabelText(text)
+            worker.match_progress.connect(progress_update)
+            progress.setMinimum(0)
+            progress.setMaximum(100)
+            progress.setModal(True)
+            progress.setWindowTitle("Matching features")
 
-        def good_match(m1, m2, max_distance=np.inf):
-            assert m1.distance <= m2.distance, "Not ordered, distances: {} and {}".format(m1.distance, m2.distance)
-            return (m1.distance < 0.75 * m2.distance) and m1.distance < max_distance
+            def cancel_action():
+                print('Disconnecting signals')
+                worker.success_signal.disconnect()
+                worker.fail_signal.disconnect()
+                worker.match_progress.disconnect()
+                print('Signals disconnected')
+                #progress.deleteLater()
+                #worker.deleteLater()
 
-        ratio_matches = [m1 for m1, m2 in matches if good_match(m1, m2)]
-        print('Ratio test reduced to {:d} matches'.format(len(ratio_matches)))
+            progress.canceled.connect(cancel_action)
 
-        if ratio_matches:
-            print('Drawing image')
-            flags = cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS | cv2.DRAW_MATCHES_FLAGS_NOT_DRAW_SINGLE_POINTS
-            cmp_image = cv2.drawMatches(im1_roi, kps1, im2_roi, kps2, ratio_matches, np.array([]), flags=flags)
-            self.image.set_array(cmp_image)
-        else:
-            print('No matches to draw')
+        worker.start()
+        print('Thread started', worker)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
