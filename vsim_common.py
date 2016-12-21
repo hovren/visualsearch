@@ -72,7 +72,7 @@ class VisualDatabase:
         self._build_db(image_dict)
 
         if stop_top or stop_bottom:
-            self._apply_stop_list(stop_top, stop_bottom)
+            self._apply_stop_list(stop_bottom, stop_top)
 
     def _build_db(self, image_dict):
         self._image_dict = image_dict
