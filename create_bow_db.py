@@ -30,6 +30,7 @@ def compute_bow_vector(args):
     return key, document_word_freq
 
 def compute_gridded_bow_vector(args):
+    #print('Starting work')
     image_file_path, vocabulary = args
     image = cv2.imread(image_file_path)
     kps, descriptors = grid_sift(image, SIFT_GRID_RADIUS)
@@ -44,6 +45,7 @@ if __name__ == "__main__":
     parser.add_argument('out')
     parser.add_argument('--gridded', action='store_true')
     parser.add_argument('--overwrite', action='store_true')
+    parser.add_argument('--nproc', type=int)
     args = parser.parse_args()
     
     directory = os.path.expanduser(args.directory)
@@ -68,7 +70,9 @@ if __name__ == "__main__":
 
     print('{} has {:d} source files'.format(directory, len(source_files)))
 
-    with h5py.File(out_file, 'w') as f, multiprocessing.Pool() as pool, tqdm.tqdm(total=len(source_files)) as pbar:
+    print('Using {} processes'.format(args.nproc))
+
+    with h5py.File(out_file, 'w') as f, multiprocessing.Pool(processes=args.nproc) as pool, tqdm.tqdm(total=len(source_files)) as pbar:
         for key, document_word_freq in pool.imap_unordered(compute_func, zip(source_files, repeat(vocabulary))):
             assert key not in f.keys()
             f[key] = document_word_freq
