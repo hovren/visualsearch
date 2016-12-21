@@ -66,6 +66,14 @@ def inside_roi(kp, roi):
     x, y = kp.pt
     return (rx <= x <= rx + rw) and (ry <= y <= ry + rh)
 
+
+def grid_sift(image, radius, step):
+    h, w, *_ = image.shape
+    keypoints = [cv2.KeyPoint(x, y, radius*2) for x in range(radius, w - radius, step)
+                                              for y in range(radius, h - radius, step)]
+    sift = cv2.xfeatures2d.SIFT_create()
+    return sift.compute(image, keypoints)
+
 class VisualDatabase:
     def __init__(self, image_dict, vocabulary, stop_bottom=0, stop_top=0):
         self.vocabulary = vocabulary
