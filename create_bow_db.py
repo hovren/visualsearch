@@ -6,14 +6,19 @@ import glob
 import os
 import sys
 from itertools import repeat
+import collections
 
 import h5py
+import numpy as np
 import tqdm
 import cv2
+import annoy
 
 from vsim_common import load_vocabulary, load_SIFT_descriptors, descriptors_to_bow_vector, grid_sift
 
 SIFT_GRID_RADIUS = 4
+SIFT_FEATURE_LENGTH = 128
+EXACT_VOCABULARY_MAX_SIZE = 15000
 
 class BowComputer:
     def __init__(self, vocabulary):
@@ -38,6 +43,68 @@ class GridBowComputer:
         key = os.path.basename(image_file_path).split('.jpg')[0]
         return key, document_word_freq
 
+class AnnBowComputer:
+    @staticmethod
+    def build_index(vocabulary):
+        index = annoy.AnnoyIndex(SIFT_FEATURE_LENGTH, metric='euclidean')
+        vocabulary_size = len(vocabulary)
+        with tqdm.tqdm(total=len(vocabulary), desc="Building Index") as pbar:
+            for i, x in enumerate(vocabulary):
+                index.add_item(i, x)
+                pbar.update(1)
+        index.build(n_trees=10)
+
+        return index, vocabulary_size
+
+    def __init__(self, index_file, voc_size):
+        self.index_file = index_file
+        self.vocabulary_size = voc_size
+
+
+    def compute(self, sift_file_path):
+        #print('Loading', sift_file_path)
+        #print('Loading index for', sift_file_path)
+        index = annoy.AnnoyIndex(SIFT_FEATURE_LENGTH, metric='euclidean')
+        index.load(self.index_file)
+        #print('Index loaded for ', sift_file_path)
+        descriptors = load_SIFT_descriptors(sift_file_path)
+        key = os.path.basename(sift_file_path).split('.sift.h5')[0]
+        document_word_count = collections.Counter()
+        for des in descriptors:
+            #print('Running')
+            res = index.get_nns_by_vector(des, 1) # Nearest neighbour
+            #print('Res:', res)
+            label = res[0]
+            document_word_count[label] += 1
+        document_word_freq = np.array([document_word_count[i] for i in range(self.vocabulary_size)])
+        #print('Done with', sift_file_path)
+        return key, document_word_freq
+
+
+class AnnBowComputerDirect:
+    def __init__(self, vocabulary):
+        self.index = annoy.AnnoyIndex(SIFT_FEATURE_LENGTH, metric='euclidean')
+        self.vocabulary_size = len(vocabulary)
+        with tqdm.tqdm(total=len(vocabulary), desc="Building Index") as pbar:
+            for i, x in enumerate(vocabulary):
+                if i % 1000 == 0:
+                    print(i, x.dtype)
+                self.index.add_item(i, x)
+                pbar.update(1)
+        self.index.build(n_trees=10)
+
+
+    def compute(self, sift_file_path):
+        #print('Loading', sift_file_path)
+        descriptors = load_SIFT_descriptors(sift_file_path)
+        key = os.path.basename(sift_file_path).split('.sift.h5')[0]
+        document_word_count = collections.Counter()
+        for des in descriptors:
+            res = self.index.get_nns_by_vector(des, 1) # Nearest neighbour
+            label = res[0]
+            document_word_count[label] += 1
+        document_word_freq = np.array([document_word_count[i] for i in range(self.vocabulary_size)])
+        return key, document_word_freq
 
 def worker(args):
     source_file, computer = args
@@ -64,7 +131,19 @@ if __name__ == "__main__":
     vocabulary = load_vocabulary(vocabulary_file)
     print('Vocabulary {} contained {} visual words'.format(vocabulary_file, len(vocabulary)))
 
-    if args.grid:
+    if len(vocabulary) > EXACT_VOCABULARY_MAX_SIZE:
+        print('Large vocabulary ({:d} > {:d}), using approximate nearest neighbour'.format(len(vocabulary), EXACT_VOCABULARY_MAX_SIZE))
+        source_files = glob.glob(os.path.join(directory, '*.sift.h5'))
+        #computer = AnnBowComputer(vocabulary)
+        index, voc_size = AnnBowComputer.build_index(vocabulary)
+        index_path = '/tmp/bow_db_creator_annoy_index.ann'
+        if os.path.exists(index_path):
+            print('Removing', index_path)
+            os.remove(index_path)
+        index.save(index_path)
+        computer = AnnBowComputer(index_path, voc_size)
+
+    elif args.grid:
         radius, step = args.grid
         if step < 1:
             step = int(radius / 2)
