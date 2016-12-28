@@ -5,6 +5,7 @@ import cv2
 import h5py
 import numpy as np
 import scipy.spatial
+import annoy
 
 import matplotlib.pyplot as plt
 
@@ -74,6 +75,19 @@ def grid_sift(image, radius, step):
     sift = cv2.xfeatures2d.SIFT_create()
     return sift.compute(image, keypoints)
 
+
+def l1_distance(x, y):
+    x = x / np.linalg.norm(x, ord=1)
+    y = y / np.linalg.norm(y, ord=1)
+    return np.linalg.norm(x - y, ord=1)
+
+
+def cos_distance(x, y):
+    x = x / np.linalg.norm(x)
+    y = y / np.linalg.norm(y)
+    return 1 - np.dot(x, y)
+
+
 class VisualDatabase:
     def __init__(self, image_dict, vocabulary, stop_bottom=0, stop_top=0):
         self.vocabulary = vocabulary
@@ -81,6 +95,8 @@ class VisualDatabase:
 
         if stop_top or stop_bottom:
             self._apply_stop_list(stop_bottom, stop_top)
+
+        self._gridded = {}
 
     def _build_db(self, image_dict):
         self._image_dict = image_dict
@@ -91,6 +107,7 @@ class VisualDatabase:
         database_total_word_count = None
         for v in image_dict.values():
             if database_word_count is None:
+                # Start at 1 to make it robust when dividing later
                 database_word_count = np.ones_like(v)
                 database_total_word_count = np.ones_like(v)
             database_word_count += (v > 0)
@@ -100,11 +117,11 @@ class VisualDatabase:
         self._log_idf = np.log(len(image_dict) / database_word_count)
 
         # Store TF-IDF vectors for all images
-        self._image_words = {}
+        self._tfidf_vectors = {}
         for key, v in image_dict.items():
             tf = v.astype('float64') / np.sum(v)
             tfidf = tf * self._log_idf
-            self._image_words[key] = tfidf / np.linalg.norm(tfidf)
+            self._tfidf_vectors[key] = tfidf
 
     def _descriptor_to_vector(self, des):
         return descriptors_to_bow_vector(des, self.vocabulary)
@@ -125,13 +142,13 @@ class VisualDatabase:
         self.vocabulary = self.vocabulary[valid_idxs]
         self._log_idf = self._log_idf[valid_idxs]
 
-        for key, v in self._image_words.items():
-            self._image_words[key] = v[valid_idxs]
+        for key, v in self._tfidf_vectors.items():
+            self._tfidf_vectors[key] = v[valid_idxs]
 
         for key, v in self._image_dict.items():
             self._image_dict[key] = v[valid_idxs]
 
-    def query_vector(self, Vq, method='default'):
+    def query_vector(self, Vq, method='default', distance='cos'):
         Vq = Vq.astype('float64')
         # tf = (Vq.astype('float64') / np.sum(Vq))
         if method == 'default':
@@ -140,14 +157,31 @@ class VisualDatabase:
             tf = 0.5 + 0.5 * Vq / Vq.max()
         else:
             raise ValueError("Uknown method '{}'".format(method))
+
         Vq_tfidf = tf * self._log_idf
-        Vq_tfidf /= np.linalg.norm(Vq_tfidf)
-        scores = [(key, np.dot(Vq_tfidf, Vdb)) for key, Vdb in self._image_words.items()]
-        scores.sort(key=lambda x: x[1], reverse=True)
+
+        if distance == 'cos':
+            distance_func = cos_distance
+        elif distance == 'l1':
+            distance_func = l1_distance
+        else:
+            raise ValueError("Unknown distance '{}'".format(distance))
+
+        scores = [(key, distance_func(Vq_tfidf, Vdb)) for key, Vdb in self._tfidf_vectors.items()]
+        scores.sort(key=lambda x: x[1]) #, reverse=True)
         return scores
 
-    def query_image(self, image, roi, method='default', sift_file=None):
-        if sift_file:
+    def query_image(self, image, roi, method='default', distance='cos', sift_file=None, grid=False):
+        if grid:
+            if id(image) in self._gridded:
+                print('Loading previous gridded descriptors')
+                kps, des = self._gridded[id(image)]
+            else:
+                print('Calculating gridded SIFT descriptors')
+                radius = 4
+                kps, des = grid_sift(image, radius)
+                self._gridded[id(image)] = (kps, des)
+        elif sift_file:
             print('Loading SIFT features from', sift_file)
             des, kps = load_SIFT_file(sift_file)
         else:
@@ -165,7 +199,7 @@ class VisualDatabase:
         print('Calculating BOW vector')
         Vq = self._descriptor_to_vector(des)
 
-        return self.query_vector(Vq, method=method)
+        return self.query_vector(Vq, method=method, distance=distance)
 
     @classmethod
     def from_file(cls, db_path, **kwargs):
@@ -176,6 +210,23 @@ class VisualDatabase:
         instance = cls(db_dict, vocabulary, **kwargs)
         return instance
 
+class AnnVisualDatabase(VisualDatabase):
+    def __init__(self, image_dict, vocabulary, stop_bottom=0, stop_top=0):
+        super().__init__(image_dict, vocabulary, stop_bottom=stop_bottom, stop_top=stop_top)
+        self.index = annoy.AnnoyIndex(128, metric='euclidean')
+        for i, x in enumerate(vocabulary):
+            self.index.add_item(i, x)
+        self.index.build(n_trees=10)
+
+    def _descriptor_to_vector(self, des):
+        document_word_count = collections.Counter()
+        for i, d in enumerate(des):
+            l, *_ = self.index.get_nns_by_vector(d, 1)
+            document_word_count[l] += 1
+        document_word_freq = np.array([document_word_count[i] for i in range(len(self.vocabulary))])
+        return document_word_freq
+
+
 
 class MultiVisualDatabase(VisualDatabase):
     def __init__(self, databases):
@@ -184,6 +235,8 @@ class MultiVisualDatabase(VisualDatabase):
         image_dict = self._build_image_dict()
         self._build_db(image_dict)
 
+        self._gridded = {}
+
     def _descriptor_to_vector(self, des):
         vectors = [descriptors_to_bow_vector(des, db.vocabulary) for db in self.databases]
         return np.hstack(vectors)
@@ -191,7 +244,7 @@ class MultiVisualDatabase(VisualDatabase):
     def _build_image_dict(self):
         # Get list of images
         db0 = self.databases[0]
-        keys = db0._image_words.keys()
+        keys = db0._tfidf_vectors.keys()
 
         image_dict = {}
         for key in keys:
