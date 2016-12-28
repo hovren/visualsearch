@@ -47,8 +47,8 @@ if __name__ == "__main__":
     data = np.vstack(sift_descriptors)
     print('Loaded {} SIFT descriptors from {} files'.format(len(data), len(sift_descriptors)))
     
-    iterations = 5
-    attempts = 10
+    iterations = 10 #5
+    attempts = 100 #10
     clusters = args.size
     
     
@@ -73,10 +73,14 @@ if __name__ == "__main__":
 
     elif args.kmeans == 'sklearn':
         #kmeans = sklearn.cluster.KMeans(clusters, init='random', n_init=attempts, max_iter=iterations, n_jobs=-1, copy_x=False)
-        kmeans = sklearn.cluster.MiniBatchKMeans(clusters, init='random', batch_size=100, n_init=attempts, max_iter=iterations, verbose=True)
+        kmeans = sklearn.cluster.MiniBatchKMeans(clusters, init='random', batch_size=100, n_init=attempts, max_iter=iterations, compute_labels=False, verbose=True)
         kmeans.fit(data)
-        score = kmeans.inertia_
-        labels = kmeans.labels_
+        try:
+            score = kmeans.inertia_
+            labels = kmeans.labels_
+        except AttributeError:
+            score = -1
+            labels = []
         centroids = kmeans.cluster_centers_
                 
     elapsed = time.time() - t0
