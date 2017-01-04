@@ -93,8 +93,7 @@ class VisualDatabase:
         self.vocabulary = vocabulary
         self._build_db(image_dict)
 
-        if stop_top or stop_bottom:
-            self._apply_stop_list(stop_bottom, stop_top)
+        self._apply_stop_list(stop_bottom, stop_top)
 
         self._gridded = {}
 
@@ -130,25 +129,13 @@ class VisualDatabase:
         word_count_order = np.argsort(self.__total_word_count)
         N_bottom = int(np.round(len(word_count_order) * stop_bottom))
         N_top = int(np.round(len(word_count_order) * stop_top))
-        print('Removing {:d} least and {:d} most occuring words in database'.format(N_bottom, N_top))
-
         voc_size = len(self.vocabulary)
         valid_idxs = word_count_order[np.arange(N_bottom, voc_size - N_top)]
+        self.valid_mask = np.zeros(voc_size, dtype='bool')
+        self.valid_mask[valid_idxs] = 1
+        self.stop_list = np.flatnonzero(~self.valid_mask)
 
-        fig, (ax1, ax2) = plt.subplots(2, 1)
-        ax1.plot(self.__total_word_count[word_count_order])
-        ax2.plot(self.__total_word_count[valid_idxs])
-
-        self.vocabulary = self.vocabulary[valid_idxs]
-        self._log_idf = self._log_idf[valid_idxs]
-
-        for key, v in self._tfidf_vectors.items():
-            self._tfidf_vectors[key] = v[valid_idxs]
-
-        for key, v in self._image_dict.items():
-            self._image_dict[key] = v[valid_idxs]
-
-    def query_vector(self, Vq, method='default', distance='cos'):
+    def query_vector(self, Vq, method='default', distance='cos', use_stop_list=True):
         Vq = Vq.astype('float64')
         # tf = (Vq.astype('float64') / np.sum(Vq))
         if method == 'default':
@@ -167,11 +154,15 @@ class VisualDatabase:
         else:
             raise ValueError("Unknown distance '{}'".format(distance))
 
-        scores = [(key, distance_func(Vq_tfidf, Vdb)) for key, Vdb in self._tfidf_vectors.items()]
+        if use_stop_list:
+            print('Using stop list with {:d} words of {:d} total'.format(np.count_nonzero(~self.valid_mask), len(self.valid_mask)))
+            scores = [(key, distance_func(Vq_tfidf[self.valid_mask], Vdb[self.valid_mask])) for key, Vdb in self._tfidf_vectors.items()]
+        else:
+            scores = [(key, distance_func(Vq_tfidf, Vdb)) for key, Vdb in self._tfidf_vectors.items()]
         scores.sort(key=lambda x: x[1]) #, reverse=True)
         return scores
 
-    def query_image(self, image, roi, method='default', distance='cos', sift_file=None, grid=False):
+    def query_image(self, image, roi, method='default', distance='cos', use_stop_list=True, sift_file=None, grid=False):
         if grid:
             if id(image) in self._gridded:
                 print('Loading previous gridded descriptors')
@@ -199,7 +190,7 @@ class VisualDatabase:
         print('Calculating BOW vector')
         Vq = self._descriptor_to_vector(des)
 
-        return self.query_vector(Vq, method=method, distance=distance)
+        return self.query_vector(Vq, method=method, distance=distance, use_stop_list=use_stop_list)
 
     @classmethod
     def from_file(cls, db_path, **kwargs):
