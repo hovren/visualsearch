@@ -207,7 +207,7 @@ class AnnVisualDatabase(VisualDatabase):
         self.index = annoy.AnnoyIndex(128, metric='euclidean')
         for i, x in enumerate(vocabulary):
             self.index.add_item(i, x)
-        self.index.build(n_trees=10)
+        self.index.build(n_trees=20)
 
     def _descriptor_to_vector(self, des):
         document_word_count = collections.Counter()
