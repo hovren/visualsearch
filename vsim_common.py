@@ -203,7 +203,15 @@ class VisualDatabase:
         else:
             print('Detecting and calculating SIFT descriptors')
             detector = cv2.xfeatures2d.SIFT_create()
-            kps, des = detector.detectAndCompute(image, None)
+            if upsample:
+                x, y, w, h = roi
+                query_image = image[y:y+h, x:x+w]
+                query_image = cv2.resize(query_image, None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
+                print('Resized query image (correctly) from {} to {}'.format((h, w), query_image.shape))
+                roi = (0, 0, query_image.shape[1], query_image.shape[0])
+            else:
+                query_image = image
+            kps, des = detector.detectAndCompute(query_image, None)
 
         print('Found {} SIFT keypoints'.format(len(kps)))
 
