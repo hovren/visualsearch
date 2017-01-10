@@ -83,31 +83,6 @@ class AnnBowComputer:
         return key, document_word_freq
 
 
-class AnnBowComputerDirect:
-    def __init__(self, vocabulary):
-        self.index = annoy.AnnoyIndex(SIFT_FEATURE_LENGTH, metric='euclidean')
-        self.vocabulary_size = len(vocabulary)
-        with tqdm.tqdm(total=len(vocabulary), desc="Building Index") as pbar:
-            for i, x in enumerate(vocabulary):
-                if i % 1000 == 0:
-                    print(i, x.dtype)
-                self.index.add_item(i, x)
-                pbar.update(1)
-        self.index.build(n_trees=10)
-
-
-    def compute(self, sift_file_path):
-        #print('Loading', sift_file_path)
-        descriptors = load_SIFT_descriptors(sift_file_path)
-        key = os.path.basename(sift_file_path).split('.sift.h5')[0]
-        document_word_count = collections.Counter()
-        for des in descriptors:
-            res = self.index.get_nns_by_vector(des, 1) # Nearest neighbour
-            label = res[0]
-            document_word_count[label] += 1
-        document_word_freq = np.array([document_word_count[i] for i in range(self.vocabulary_size)])
-        return key, document_word_freq
-
 def worker(args):
     source_file, computer = args
     return computer.compute(source_file)
