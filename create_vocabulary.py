@@ -4,6 +4,7 @@ import argparse
 import glob
 import os
 import time
+import heapq
 
 import h5py
 import numpy as np
@@ -23,6 +24,12 @@ except ImportError:
 try:
     import sklearn.cluster
     kmeans_providers.append('sklearn')
+except ImportError:
+    pass
+
+try:
+    from annoy_kmeans import approx_kmeans_annoy
+    kmeans_providers.append('annoy')
 except ImportError:
     pass
 
@@ -54,11 +61,19 @@ if __name__ == "__main__":
         descriptors.extend(desc)
 
     print('Feature dimensions:', len(descriptors[0]))
+
+    #data = np.vstack(sift_descriptors)
+    #data = sift_descriptors
     print('Loaded {} {} descriptors from {} files'.format(len(descriptors), args.feature, len(descriptors)))
     
     iterations = args.iterations
     attempts = args.tries
     clusters = args.size
+
+    if args.kmeans in ['annoy']:
+        data = descriptors
+    else:
+        data = np.vstack(descriptors)
     
     
     print('Clustering vocabulary using {} with K={}, {:d} iterations and {:d} attempts'.format(args.kmeans, args.size, iterations, attempts))
@@ -91,6 +106,15 @@ if __name__ == "__main__":
             score = -1
             labels = []
         centroids = kmeans.cluster_centers_
+
+    elif args.kmeans == 'annoy':
+        score = np.inf
+        labels = None
+        centroids = None
+        with tqdm.tqdm(total=iterations*attempts) as pbar:
+            def cb(score, num_empty):
+                pbar.update(1)
+            centroids, labels, score = approx_kmeans_annoy(data, clusters, iterations, iter_callback=cb, nprocs=args.nprocs)
                 
     elapsed = time.time() - t0
     
