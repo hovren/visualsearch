@@ -123,7 +123,7 @@ class VisualDatabase:
         # Store TF-IDF vectors for all images
         self._tfidf_vectors = {}
         for key, v in image_dict.items():
-            tf = v.astype('float64') / np.sum(v)
+            tf = v.astype('float64') #/ np.sum(v)
             tfidf = tf * self._log_idf
             self._tfidf_vectors[key] = tfidf
 
