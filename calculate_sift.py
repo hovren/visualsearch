@@ -1,15 +1,13 @@
 #/usr/bin/env python3
 
-import os
 import argparse
+import os
 
 import cv2
-import h5py
-import numpy as np
-
 import tqdm
 
-from vsim_common import sift_file_for_image
+from vsim_common import sift_file_for_image, save_keypoints_and_descriptors
+
 
 def find_missing(directory):
     def match(filename):
@@ -23,8 +21,6 @@ def find_missing(directory):
             return False            
         
     return [os.path.join(directory, f) for f in os.listdir(directory) if match(f)]
-    
-
 
 
 if __name__ == "__main__":
@@ -42,13 +38,7 @@ if __name__ == "__main__":
     for path in tqdm.tqdm(missing):
         img = cv2.imread(path)
         kps, desc = detector.detectAndCompute(img, None)
-        with h5py.File(sift_file_for_image(path), 'w') as f:
-            f['descriptors'] = np.vstack(desc)
-            g = f.create_group('keypoints')
-            g['pt'] = np.vstack([kp.pt for kp in kps])
-            g['size'] = np.vstack([kp.size for kp in kps])
-            g['angle'] = np.vstack([kp.angle for kp in kps])
-            g['response'] = np.vstack([kp.response for kp in kps])
-            g['octave'] = np.vstack([kp.octave for kp in kps])
+        outpath = sift_file_for_image(path)
+        save_keypoints_and_descriptors(outpath, kps, desc)
 
     print('Done')            

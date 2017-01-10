@@ -243,3 +243,11 @@ class MultiVisualDatabase(VisualDatabase):
             assert Vdb.ndim == 1
             image_dict[key] = Vdb
         return image_dict
+def save_keypoints_and_descriptors(path, kps, desc):
+    with h5py.File(path, 'w') as f:
+        f['descriptors'] = np.vstack(desc)
+        g = f.create_group('keypoints')
+        g['pt'] = np.vstack([kp.pt for kp in kps])
+        g['size'] = np.vstack([kp.size for kp in kps])
+        g['angle'] = np.vstack([kp.angle for kp in kps])
+        g['response'] = np.vstack([kp.response for kp in kps])
