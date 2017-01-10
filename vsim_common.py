@@ -215,9 +215,7 @@ class VisualDatabase:
 
         print('Found {} SIFT keypoints'.format(len(kps)))
 
-        valid = [i for i, kp in enumerate(kps) if inside_roi(kp, roi)]
-        kps = [kp for i, kp in enumerate(kps) if i in valid]
-        des = des[valid]
+        kps, des = filter_roi(kps, des, roi)
 
         print('Features in ROI:', len(kps))
         print('Calculating BOW vector')
