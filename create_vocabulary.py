@@ -10,7 +10,7 @@ import numpy as np
 import scipy.cluster
 import tqdm
 
-from vsim_common import load_SIFT_descriptors, kmeans_score, save_vocabulary
+from vsim_common import load_SIFT_descriptors, kmeans_score, save_vocabulary, FEATURE_TYPES
 
 # KMeans providers
 kmeans_providers = ['scipy'] # Scipy should always be installed
@@ -27,28 +27,37 @@ except ImportError:
     pass
 
 
+FEATURES_DICT = {ft.key: ft for ft in FEATURE_TYPES}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('directory')
     parser.add_argument('out')
     parser.add_argument('size', type=int)
+    parser.add_argument('feature', choices=list(FEATURES_DICT.keys()))
+    parser.add_argument('--iterations', type=int, default=10)
+    parser.add_argument('--tries', type=int, default=1)
+    parser.add_argument('--nprocs', type=int, default=1)
     parser.add_argument('--kmeans', choices=kmeans_providers, default='scipy')
     args = parser.parse_args()
     
     out_path = os.path.expanduser(args.out)
-    sift_files = glob.glob(os.path.join(os.path.expanduser(args.directory), '*.sift.h5'))
+    feat_type = FEATURES_DICT[args.feature]
+    glob_expr = '*' + feat_type.extension
+    descriptor_files = glob.glob(os.path.join(os.path.expanduser(args.directory), glob_expr))
 
-    sift_descriptors = []
-    print('Loading SIFT descriptors...')
-    for path in tqdm.tqdm(sift_files):
-        desc = load_SIFT_descriptors(path)
-        sift_descriptors.append(desc)
-     
-    data = np.vstack(sift_descriptors)
-    print('Loaded {} SIFT descriptors from {} files'.format(len(data), len(sift_descriptors)))
+    descriptors = []
+    print('Loading {} descriptors...'.format(args.feature))
+    for path in tqdm.tqdm(descriptor_files):
+        desc = load_SIFT_descriptors(path) # Note: All descriptors are loaded by the same function
+        descriptors.extend(desc)
+
+    print('Feature dimensions:', len(descriptors[0]))
+    print('Loaded {} {} descriptors from {} files'.format(len(descriptors), args.feature, len(descriptors)))
     
-    iterations = 10 #5
-    attempts = 100 #10
+    iterations = args.iterations
+    attempts = args.tries
     clusters = args.size
     
     

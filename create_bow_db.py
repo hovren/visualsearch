@@ -1,33 +1,34 @@
 #!/usr/bin/env python
 
 import argparse
-import multiprocessing
+import collections
 import glob
+import multiprocessing
 import os
 import sys
 from itertools import repeat
-import collections
 
+import annoy
+import cv2
 import h5py
 import numpy as np
 import tqdm
-import cv2
-import annoy
 
-from vsim_common import load_vocabulary, load_SIFT_descriptors, descriptors_to_bow_vector, grid_sift
+from vsim_common import load_vocabulary, load_SIFT_descriptors, descriptors_to_bow_vector, grid_sift, FEATURE_TYPES
 
 SIFT_GRID_RADIUS = 4
 SIFT_FEATURE_LENGTH = 128
 EXACT_VOCABULARY_MAX_SIZE = 15000
 
 class BowComputer:
-    def __init__(self, vocabulary):
+    def __init__(self, vocabulary, feat_type):
         self.vocabulary = vocabulary
+        self.feat_type = feat_type
 
     def compute(self, sift_file_path):
         descriptors = load_SIFT_descriptors(sift_file_path)
         document_word_freq = descriptors_to_bow_vector(descriptors, self.vocabulary)
-        key = os.path.basename(sift_file_path).split('.sift.h5')[0]
+        key = os.path.basename(sift_file_path).split(feat_type.extension)[0]
         return key, document_word_freq
 
 class GridBowComputer:
@@ -45,8 +46,8 @@ class GridBowComputer:
 
 class AnnBowComputer:
     @staticmethod
-    def build_index(vocabulary):
-        index = annoy.AnnoyIndex(SIFT_FEATURE_LENGTH, metric='euclidean')
+    def build_index(vocabulary, feat_size):
+        index = annoy.AnnoyIndex(feat_size, metric='euclidean')
         vocabulary_size = len(vocabulary)
         with tqdm.tqdm(total=len(vocabulary), desc="Building Index") as pbar:
             for i, x in enumerate(vocabulary):
@@ -56,19 +57,20 @@ class AnnBowComputer:
 
         return index, vocabulary_size
 
-    def __init__(self, index_file, voc_size):
+    def __init__(self, index_file, voc_size, feat_type):
         self.index_file = index_file
+        self.feat_type = feat_type
         self.vocabulary_size = voc_size
 
 
     def compute(self, sift_file_path):
         #print('Loading', sift_file_path)
         #print('Loading index for', sift_file_path)
-        index = annoy.AnnoyIndex(SIFT_FEATURE_LENGTH, metric='euclidean')
+        index = annoy.AnnoyIndex(self.feat_type.featsize, metric='euclidean')
         index.load(self.index_file)
         #print('Index loaded for ', sift_file_path)
         descriptors = load_SIFT_descriptors(sift_file_path)
-        key = os.path.basename(sift_file_path).split('.sift.h5')[0]
+        key = os.path.basename(sift_file_path).split(self.feat_type.extension)[0]
         document_word_count = collections.Counter()
         for des in descriptors:
             #print('Running')
@@ -110,11 +112,15 @@ def worker(args):
     source_file, computer = args
     return computer.compute(source_file)
 
+
+FEATURES_DICT = {ft.key: ft for ft in FEATURE_TYPES}
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('directory')
     parser.add_argument('vocabulary')
     parser.add_argument('out')
+    parser.add_argument('feature', choices=list(FEATURES_DICT.keys()))
     parser.add_argument('--grid', nargs=2, type=int)
     parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--nproc', type=int)
@@ -131,19 +137,10 @@ if __name__ == "__main__":
     vocabulary = load_vocabulary(vocabulary_file)
     print('Vocabulary {} contained {} visual words'.format(vocabulary_file, len(vocabulary)))
 
-    if len(vocabulary) > EXACT_VOCABULARY_MAX_SIZE:
-        print('Large vocabulary ({:d} > {:d}), using approximate nearest neighbour'.format(len(vocabulary), EXACT_VOCABULARY_MAX_SIZE))
-        source_files = glob.glob(os.path.join(directory, '*.sift.h5'))
-        #computer = AnnBowComputer(vocabulary)
-        index, voc_size = AnnBowComputer.build_index(vocabulary)
-        index_path = '/tmp/bow_db_creator_annoy_index.ann'
-        if os.path.exists(index_path):
-            print('Removing', index_path)
-            os.remove(index_path)
-        index.save(index_path)
-        computer = AnnBowComputer(index_path, voc_size)
+    feat_type = FEATURES_DICT[args.feature]
+    print('Using {} features with {:d} dimensions'.format(feat_type.name, feat_type.featsize))
 
-    elif args.grid:
+    if args.grid and feat_type.key == 'sift':
         radius, step = args.grid
         if step < 1:
             step = int(radius / 2)
@@ -151,9 +148,21 @@ if __name__ == "__main__":
         source_files = glob.glob(os.path.join(directory, '*.jpg'))
         computer = GridBowComputer(vocabulary, radius, step)
     else:
-        print('Using SIFT keypoints')
-        source_files = glob.glob(os.path.join(directory, '*.sift.h5'))
-        computer = BowComputer(vocabulary)
+        glob_expr = '*' + feat_type.extension
+        source_files = glob.glob(os.path.join(directory, glob_expr))
+        if len(vocabulary) > EXACT_VOCABULARY_MAX_SIZE:
+            print('Large vocabulary ({:d} > {:d}), using approximate nearest neighbour'.format(len(vocabulary), EXACT_VOCABULARY_MAX_SIZE))
+
+            index, voc_size = AnnBowComputer.build_index(vocabulary, feat_type.featsize)
+            index_path = '/tmp/bow_db_creator_annoy_index.ann'
+            if os.path.exists(index_path):
+                print('Removing', index_path)
+                os.remove(index_path)
+            index.save(index_path)
+            computer = AnnBowComputer(index_path, voc_size, feat_type)
+        else:
+            print('Small vocabulary, using exact kmeans')
+            computer = BowComputer(vocabulary, feat_type)
 
     print('{} has {:d} source files'.format(directory, len(source_files)))
 

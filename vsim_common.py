@@ -9,6 +9,14 @@ import annoy
 
 import matplotlib.pyplot as plt
 
+FeatureType = collections.namedtuple('FeatureType', 'key name extension featsize')
+
+FEATURE_TYPES = (
+    FeatureType('sift', 'SIFT', '.sift.h5', 128),
+    FeatureType('colornames', 'colornames', '.cname.h5', 11)
+)
+
+
 def sift_file_for_image(image_path):
     assert image_path.endswith('.jpg')
     return os.path.splitext(image_path)[0] + '.sift.h5'
@@ -174,7 +182,8 @@ class VisualDatabase:
         scores.sort(key=lambda x: x[1]) #, reverse=True)
         return scores
 
-    def query_image(self, image, roi, method='default', distance='cos', use_stop_list=True, sift_file=None, grid=False):
+    def query_image(self, image, roi, method='default', distance='cos', use_stop_list=True, sift_file=None,
+                    grid=False, upsample=False, cname_file=None):
         if grid:
             if id(image) in self._gridded:
                 print('Loading previous gridded descriptors')
@@ -184,9 +193,13 @@ class VisualDatabase:
                 radius = 4
                 kps, des = grid_sift(image, radius)
                 self._gridded[id(image)] = (kps, des)
-        elif sift_file:
-            print('Loading SIFT features from', sift_file)
-            des, kps = load_SIFT_file(sift_file)
+        elif sift_file or cname_file:
+            if sift_file and cname_file:
+                raise ValueError("Specify either sift_file or cname_file, not both")
+
+            source = sift_file or cname_file
+            print('Loading features from', source)
+            des, kps = load_SIFT_file(source)
         else:
             print('Detecting and calculating SIFT descriptors')
             detector = cv2.xfeatures2d.SIFT_create()
