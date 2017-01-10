@@ -73,6 +73,13 @@ def inside_roi(kp, roi):
     return (rx <= x <= rx + rw) and (ry <= y <= ry + rh)
 
 
+def filter_roi(kps, des, roi):
+    valid = [i for i, kp in enumerate(kps) if inside_roi(kp, roi)]
+    kps = [kp for i, kp in enumerate(kps) if i in valid]
+    des = des[valid]
+    return kps, des
+
+
 def grid_sift(image, radius, step):
     h, w, *_ = image.shape
     keypoints = [cv2.KeyPoint(x, y, radius*2) for x in range(radius, w - radius, step)
