@@ -263,3 +263,4 @@ def save_keypoints_and_descriptors(path, kps, desc):
         g['size'] = np.vstack([kp.size for kp in kps])
         g['angle'] = np.vstack([kp.angle for kp in kps])
         g['response'] = np.vstack([kp.response for kp in kps])
+        g['octave'] = np.vstack([kp.octave for kp in kps])
