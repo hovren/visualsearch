@@ -18,22 +18,27 @@ def load_SIFT_descriptors(path):
     with h5py.File(path, 'r') as f:
         return f['descriptors'].value
 
-def load_SIFT_file(path):
+def load_SIFT_file(path, descriptors=True, keypoints=True):
     with h5py.File(path, 'r') as f:
-        descriptors = f['descriptors'].value
-        g = f['keypoints']
-        points = g['pt'].value
-        sizes = g['size'].value
-        angles = g['angle'].value
-        responses = g['response'].value
-        octaves = g['octave'].value
+        if descriptors:
+            descriptors = f['descriptors'].value
+        else:
+            descriptors = None
 
-        keypoints = []
-        for (x, y), size, angle, response, octave in zip(points, sizes, angles, responses, octaves):
-            kp = cv2.KeyPoint(x, y, size, angle, response, octave)
-            keypoints.append(kp)
+        keypoint_list = []
+        if keypoints:
+            g = f['keypoints']
+            points = g['pt'].value
+            sizes = g['size'].value
+            angles = g['angle'].value
+            responses = g['response'].value
+            octaves = g['octave'].value
 
-    return descriptors, keypoints
+            for (x, y), size, angle, response, octave in zip(points, sizes, angles, responses, octaves):
+                kp = cv2.KeyPoint(x, y, size, angle, response, octave)
+                keypoint_list.append(kp)
+
+    return descriptors, keypoint_list
 
 def save_vocabulary(means, path):
     with h5py.File(path, 'w') as f:
