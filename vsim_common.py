@@ -243,9 +243,9 @@ class VisualDatabase:
         return instance
 
 class AnnVisualDatabase(VisualDatabase):
-    def __init__(self, image_dict, vocabulary, stop_bottom=0, stop_top=0):
+    def __init__(self, image_dict, vocabulary, stop_bottom=0, stop_top=0, feat_size=128):
         super().__init__(image_dict, vocabulary, stop_bottom=stop_bottom, stop_top=stop_top)
-        self.index = annoy.AnnoyIndex(128, metric='euclidean')
+        self.index = annoy.AnnoyIndex(feat_size, metric='euclidean')
         for i, x in enumerate(vocabulary):
             self.index.add_item(i, x)
         self.index.build(n_trees=20)
@@ -270,13 +270,15 @@ class SiftColornamesDatabase(VisualDatabase):
         sift_db = AnnVisualDatabase.from_file(sift_db_path, **sift_kwargs)
         cname_kwargs = {key[len('cname_'):]: value for key, value in db_kwargs.items() if key.startswith('cname_')}
         #cname_db = AnnVisualDatabase.from_file(cname_db_path, **cname_kwargs)
-        cname_db = VisualDatabase.from_file(cname_db_path, **cname_kwargs)
+        if len(sift_db.vocabulary) < 5000:
+            cname_db = VisualDatabase.from_file(cname_db_path, **cname_kwargs)
+        else:
+            cname_db = AnnVisualDatabase.from_file(cname_db_path, feat_size=11, **cname_kwargs)
         instance = cls(sift_db, cname_db)
         return instance
 
     def query_vector(self, Vq, method='default', distance='cos', use_stop_list=True):
         raise NotImplementedError("Call query_image instead")
-
 
     def query_image(self, image, roi, method='default', distance='cos', use_stop_list=True, sift_file=None, cname_file=None):
         if not sift_file and cname_file:
@@ -294,6 +296,11 @@ class SiftColornamesDatabase(VisualDatabase):
         query_sift_tfidf = self.sift_db._descriptor_to_vector(sift_des) * self.sift_db._log_idf
         query_cname_tfidf = self.cname_db._descriptor_to_vector(cname_des) * self.cname_db._log_idf
 
+        # Compensate for different lengths
+        #len_comp_factor = len(self.sift_db._log_idf) / len(self.cname_db._log_idf)
+        #print('Compensating by a factor of', len_comp_factor)
+        #query_sift_tfidf *= len_comp_factor
+
         if use_stop_list:
             print('Using stop list, SIFT: {:d} of {:d}, colornames {:d} of {:d}'.format(
                                         np.count_nonzero(~self.sift_db.valid_mask), len(self.sift_db.valid_mask),
@@ -302,6 +309,8 @@ class SiftColornamesDatabase(VisualDatabase):
             query_cname_tfidf = query_cname_tfidf[self.cname_db.valid_mask]
 
         Vq_tfidf = np.hstack([query_sift_tfidf, query_cname_tfidf])
+        plt.figure()
+        plt.plot(Vq_tfidf)
 
         db_entries = self.sift_db._tfidf_vectors.keys()
         scores = []
