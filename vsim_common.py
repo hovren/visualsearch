@@ -117,6 +117,8 @@ class VisualDatabase:
 
         self._gridded = {}
 
+    
+
     def _build_db(self, image_dict):
         self._image_dict = image_dict
 
@@ -249,31 +251,66 @@ class AnnVisualDatabase(VisualDatabase):
         return document_word_freq
 
 
+class SiftColornamesDatabase(VisualDatabase):
+    def __init__(self, sift_db, cname_db):
+        self.sift_db = sift_db
+        self.cname_db = cname_db
 
-class MultiVisualDatabase(VisualDatabase):
-    def __init__(self, databases):
-        self.databases = databases
+    @classmethod
+    def from_files(cls, sift_db_path, cname_db_path, **db_kwargs):
+        sift_kwargs = {key[len('sift_'):]: value for key, value in db_kwargs.items() if key.startswith('sift_')}
+        sift_db = AnnVisualDatabase.from_file(sift_db_path, **sift_kwargs)
+        cname_kwargs = {key[len('cname_'):]: value for key, value in db_kwargs.items() if key.startswith('cname_')}
+        #cname_db = AnnVisualDatabase.from_file(cname_db_path, **cname_kwargs)
+        cname_db = VisualDatabase.from_file(cname_db_path, **cname_kwargs)
+        instance = cls(sift_db, cname_db)
+        return instance
 
-        image_dict = self._build_image_dict()
-        self._build_db(image_dict)
+    def query_vector(self, Vq, method='default', distance='cos', use_stop_list=True):
+        raise NotImplementedError("Call query_image instead")
 
-        self._gridded = {}
 
-    def _descriptor_to_vector(self, des):
-        vectors = [descriptors_to_bow_vector(des, db.vocabulary) for db in self.databases]
-        return np.hstack(vectors)
+    def query_image(self, image, roi, method='default', distance='cos', use_stop_list=True, sift_file=None, cname_file=None):
+        if not sift_file and cname_file:
+            raise NotImplementedError("Currently both sift_file and cname_file must be specified as calculation of colornames is not implemented")
+        elif not method == 'default' and distance == 'cos':
+            raise NotImplementedError("Only method='default' and distance='cos' is implemented")
 
-    def _build_image_dict(self):
-        # Get list of images
-        db0 = self.databases[0]
-        keys = db0._tfidf_vectors.keys()
+        sift_des, sift_kps = load_SIFT_file(sift_file)
+        cname_des, cname_kps = load_SIFT_file(cname_file)
+        assert len(sift_des) == len(cname_des)
+        assert len(sift_kps) == len(cname_kps)
+        for kp_s, kp_c in zip(sift_kps, cname_kps):
+            np.testing.assert_almost_equal(kp_s.pt, kp_c.pt)
 
-        image_dict = {}
-        for key in keys:
-            Vdb = np.hstack([db._image_dict[key] for db in self.databases])
-            assert Vdb.ndim == 1
-            image_dict[key] = Vdb
-        return image_dict
+        query_sift_tfidf = self.sift_db._descriptor_to_vector(sift_des) * self.sift_db._log_idf
+        query_cname_tfidf = self.cname_db._descriptor_to_vector(cname_des) * self.cname_db._log_idf
+
+        if use_stop_list:
+            print('Using stop list, SIFT: {:d} of {:d}, colornames {:d} of {:d}'.format(
+                                        np.count_nonzero(~self.sift_db.valid_mask), len(self.sift_db.valid_mask),
+                                        np.count_nonzero(~self.cname_db.valid_mask), len(self.cname_db.valid_mask)))
+            query_sift_tfidf = query_sift_tfidf[self.sift_db.valid_mask]
+            query_cname_tfidf = query_cname_tfidf[self.cname_db.valid_mask]
+
+        Vq_tfidf = np.hstack([query_sift_tfidf, query_cname_tfidf])
+
+        db_entries = self.sift_db._tfidf_vectors.keys()
+        scores = []
+        for key in db_entries:
+            sift_Vdb = self.sift_db._tfidf_vectors[key]
+            cname_Vdb = self.cname_db._tfidf_vectors[key]
+            if use_stop_list:
+                sift_Vdb = sift_Vdb[self.sift_db.valid_mask]
+                cname_Vdb = cname_Vdb[self.cname_db.valid_mask]
+            Vdb = np.hstack([sift_Vdb, cname_Vdb])
+
+            s = cos_distance(Vq_tfidf, Vdb)
+            scores.append((key, s))
+        scores.sort(key=lambda x: x[1])
+        return scores
+
+
 def save_keypoints_and_descriptors(path, kps, desc):
     with h5py.File(path, 'w') as f:
         f['descriptors'] = np.vstack(desc)
