@@ -29,7 +29,11 @@ class BaseDatabase:
         if descriptors_or_bow.ndim == 1:
             bow = descriptors_or_bow
         else:
-            bow = self.bag(descriptors_or_bow)
+            descriptors = descriptors_or_bow
+            bow = self.bag(descriptors)
+
+        if not len(bow) == self.vocabulary_size:
+            raise DatabaseError("Bag of Words vector had wrong size: {:d} (expected {:d})".format(len(bow), self.vocabulary_size))
 
         self.image_vectors[key] = bow
 
@@ -96,6 +100,9 @@ class AnnDatabase(BaseDatabase):
         return self.annoy_index.get_n_items()
 
     def bag(self, descriptors):
+        if not descriptors.shape[1] == self.annoy_index.f:
+            raise DatabaseError(
+                "Descriptor vectors had wrong size: {:d} (expected {:d})".format(descriptors.shape[1], self.annoy_index.f))
         document_word_count = np.zeros(self.vocabulary_size)
         for i, d in enumerate(descriptors):
             l, *_ = self.annoy_index.get_nns_by_vector(d, 1)

@@ -75,6 +75,22 @@ class AnnDatabaseTest(unittest.TestCase):
             expected_idf = np.log(N / (1 + np.sum(bows[:N].astype('bool'), axis=0).astype('float')))
             nt.assert_almost_equal(db.idf, expected_idf)
 
+    def test_add_bad_bow_size(self):
+        db = AnnDatabase(self.vocabulary)
+        bad_bow_size = 13
+        self.assertNotEqual(bad_bow_size, db.vocabulary_size)
+        bad_bow = np.random.uniform(-5, 5, size=bad_bow_size)
+        with self.assertRaises(DatabaseError):
+            db.add_image('somelabel', bad_bow)
+
+    def test_add_bad_descriptor_size(self):
+        db = AnnDatabase(self.vocabulary)
+        bad_descriptor_size = 13
+        num_descriptors = 23
+        bad_descriptors = np.random.uniform(-5, 5, size=(num_descriptors, bad_descriptor_size))
+
+        with self.assertRaises(DatabaseError):
+            db.add_image('somelabel', bad_descriptors)
 
     def test_length(self):
         db = AnnDatabase(self.vocabulary)
