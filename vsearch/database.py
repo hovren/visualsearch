@@ -20,11 +20,32 @@ class BaseDatabase:
         self.image_vectors = {}
         self.idf = None
         self._load_vocabulary(vocabulary)
+        self._word_counts = np.zeros(self.vocabulary_size, dtype='int')
 
-    def add_image(self, key, descriptors):
+    def add_image(self, key, descriptors_or_bow):
         if key in self.image_vectors:
             raise DatabaseError("Image '{}' is already in the database".format(key))
-        self.image_vectors[key] = self.bag(descriptors)
+
+        if descriptors_or_bow.ndim == 1:
+            bow = descriptors_or_bow
+        else:
+            bow = self.bag(descriptors_or_bow)
+
+        self.image_vectors[key] = bow
+
+        # Update IDF
+        self._word_counts += (bow > 0)
+        self.idf = np.log(len(self.image_vectors) / (1 + self._word_counts).astype('float'))
+
+    @property
+    def vocabulary_size(self):
+        return self._voc_size()
+
+    def _voc_size(self):
+        raise NotImplementedError(SUBCLASS_MESSAGE)
+
+    def __len__(self):
+        return len(self.image_vectors)
 
     def query(self, descriptors):
         q_tf = self.bag(descriptors)
@@ -45,10 +66,17 @@ class BaseDatabase:
         raise NotImplementedError(SUBCLASS_MESSAGE)
 
     @classmethod
-    def from_file(cls, vocabulary_file):
-        with h5py.File(vocabulary_file, 'r') as f:
+    def from_file(cls, database_file):
+        with h5py.File(database_file, 'r') as f:
             vocabulary = f['vocabulary']
-        instance = cls(vocabulary)
+            instance = cls(vocabulary)
+
+            for key in f:
+                if not key == 'vocabulary':
+                    descriptors = f[key].value
+                    instance.add_image(key, descriptors)
+
+        return instance
 
 
 class AnnDatabase(BaseDatabase):
@@ -64,10 +92,12 @@ class AnnDatabase(BaseDatabase):
             self.annoy_index.add_item(i, x)
         self.annoy_index.build(self.n_trees)
 
+    def _voc_size(self):
+        return self.annoy_index.get_n_items()
+
     def bag(self, descriptors):
-        document_word_count = collections.Counter()
+        document_word_count = np.zeros(self.vocabulary_size)
         for i, d in enumerate(descriptors):
             l, *_ = self.annoy_index.get_nns_by_vector(d, 1)
             document_word_count[l] += 1
-        document_word_freq = np.array([document_word_count[i] for i in range(self.annoy_index.get_n_items())])
-        return document_word_freq
+        return document_word_count
