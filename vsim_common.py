@@ -68,6 +68,14 @@ def label_data(centroids, data):
     assert len(labels) == len(data)
     return labels
 
+
+def label_data_annoy(index, data):
+    labels = np.empty(len(data), dtype='uint')
+    for i, x in enumerate(data):
+        l, *_ = index.get_nns_by_vector(x, 1)
+        labels[i] = l
+    return labels
+
 def descriptors_to_bow_vector(descriptors, vocabulary):
     labels = label_data(vocabulary, descriptors)
     document_word_count = collections.Counter(labels.flatten().tolist())
