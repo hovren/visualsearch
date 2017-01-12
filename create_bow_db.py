@@ -18,7 +18,7 @@ from vsim_common import load_vocabulary, load_SIFT_descriptors, descriptors_to_b
 
 SIFT_GRID_RADIUS = 4
 SIFT_FEATURE_LENGTH = 128
-EXACT_VOCABULARY_MAX_SIZE = 15000
+EXACT_VOCABULARY_MAX_SIZE = 5000
 
 class BowComputer:
     def __init__(self, vocabulary, feat_type):
