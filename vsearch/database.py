@@ -1,4 +1,6 @@
 import collections
+import collections.abc
+import os
 
 import numpy as np
 import h5py
@@ -12,6 +14,8 @@ def cos_distance(x, y):
 class DatabaseError(Exception):
     pass
 
+LatLng = collections.namedtuple('LatLng', 'lat lng')
+DatabaseEntry = collections.namedtuple('DatabaseEntry', ['key', 'bow', 'latlng'])
 
 SUBCLASS_MESSAGE = "Please use one of the subclasses"
 
@@ -108,3 +112,29 @@ class AnnDatabase(BaseDatabase):
             l, *_ = self.annoy_index.get_nns_by_vector(d, 1)
             document_word_count[l] += 1
         return document_word_count
+
+
+class DatabaseWithLocation(collections.abc.MutableMapping):
+    def __init__(self, visualdb):
+        self.visualdb = visualdb
+        self.locations = collections.defaultdict(lambda: None)
+
+    def __delitem__(self, key):
+        del self.visualdb[key]
+        del self.locations[key]
+
+    def __getitem__(self, key):
+        e = DatabaseEntry(key, self.visualdb.image_vectors[key], self.locations[key])
+        return e
+
+    def __iter__(self):
+        return iter(self.visualdb.image_vectors)
+
+    def __len__(self):
+        return len(self.visualdb)
+
+    def __setitem__(self, key, value):
+        if not isinstance(value, DatabaseEntry):
+            raise ValueError("Value is not an Entry")
+        self.visualdb.image_vectors[key] = value.bow
+        self.locations[key] = value.latlng

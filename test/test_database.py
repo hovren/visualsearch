@@ -4,7 +4,7 @@ import numpy as np
 import numpy.testing as nt
 import h5py
 
-from vsearch.database import AnnDatabase, DatabaseError
+from vsearch.database import AnnDatabase, DatabaseError, DatabaseWithLocation, DatabaseEntry, LatLng
 
 test_db = 'test_db.h5'
 test_db_items = 222
@@ -104,3 +104,25 @@ class AnnDatabaseTest(unittest.TestCase):
     def test_load_from_file(self):
         db = AnnDatabase.from_file(test_db)
         self.assertEqual(len(db), test_db_items)
+
+class LocationDatabaseTests(unittest.TestCase):
+    def setUp(self):
+        self.visualdb = AnnDatabase.from_file(test_db)
+
+    def test_no_locations(self):
+        locdb = DatabaseWithLocation(self.visualdb)
+        for val in locdb.values():
+            self.assertIsInstance(val, DatabaseEntry)
+            self.assertIsNone(val.latlng)
+
+    def test_random_locs(self):
+        locdb = DatabaseWithLocation(self.visualdb)
+        lat, lng = 58.0, 65.4
+        for key, val in locdb.items():
+            new_entry = DatabaseEntry(key, val.bow, LatLng(lat, lng))
+            locdb[key] = new_entry
+
+        for key, val in locdb.items():
+            self.assertEqual(val.latlng.lat, lat)
+            self.assertEqual(val.latlng.lng, lng)
+
