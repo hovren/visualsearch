@@ -32,5 +32,8 @@ if(typeof QtWidget != 'undefined') {
     //var onMarkerClicked = function(e) { QtWidget.onMarkerClicked(this.options.marker_id) };
     var onMarkerClicked = function(e) { QtWidget.onMarkerClicked(L.stamp(this)) };
     var onMapMove = function() { QtWidget.onMove() };
+    var onMapClick = function(e) { QtWidget.onClick(e.latlng.lat, e.latlng.lng) };
+
     mymap.on('move', onMapMove);
+    mymap.on('click', onMapClick);
 }

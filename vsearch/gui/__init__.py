@@ -1,2 +1,2 @@
 from .image import ImageWidget, ImageWithROI
-from .leaflet import LeafletWidget
+from .leaflet import LeafletWidget, LeafletMarker

@@ -16,21 +16,30 @@ class LeafletMarker:
         return '<LeafletMarker id={:d} widget={}>'.format(self.id, self.map_widget)
 
     def get_property(self, property):
-        js_fmt = "marker_dict[{id:d}].{property:s}"
+        js_fmt = "marker_dict[{:d}].{:s}"
         js = js_fmt.format(self.id, property)
         return self.map_widget.run_js(js)
 
+    def object_call(self, js_method, return_value=True):
+        js = 'marker_dict[{:d}].'.format(self.id) + js_method
+        return self.map_widget.run_js(js, return_value=return_value)
+
     def remove(self, update=True):
-        js = "marker_dict[{id:d}].remove(); delete marker_dict[{id:d}]; alert(Object.keys(marker_dict).length);".format(id=self.id)
+        js = "marker_dict[{id:d}].remove(); delete marker_dict[{id:d}];".format(id=self.id)
         self.map_widget.run_js(js)
         self.id = None
 
         if update:
             self.map_widget.update()
 
+    def setDraggable(self, draggable):
+        if draggable:
+            self.object_call('dragging.enable();'.format(draggable), return_value=False)
+        else:
+            self.object_call('dragging.disable();'.format(draggable), return_value=False)
+
     def setOpacity(self, opacity):
-        js = "marker_dict[{:d}].setOpacity({:f});".format(self.id, opacity)
-        self.map_widget.run_js(js, return_value=False)
+        self.object_call("setOpacity({:f});".format(opacity), return_value=False)
 
     @classmethod
     def create_js(cls, lat, lng):
@@ -59,7 +68,7 @@ class LeafletMarker:
 class LeafletWidget(QWebView):
 
     onMove = pyqtSignal()
-    onClick = pyqtSignal()
+    onClick = pyqtSignal(float, float)
     onMarkerClicked = pyqtSignal(int)
 
     next_marker_id = 0
@@ -84,9 +93,9 @@ class LeafletWidget(QWebView):
         print('Loaded javascript')
         self.setView(lat, lng)
 
-    def map_command(self, map_command_str):
+    def map_command(self, map_command_str, return_value=True):
         js_str = 'mymap.{};'.format(map_command_str)
-        return self.run_js(js_str)
+        return self.run_js(js_str, return_value=return_value)
 
     def run_js(self, js_str, return_value=True):
         if return_value:
@@ -96,7 +105,7 @@ class LeafletWidget(QWebView):
 
     def setView(self, lat, lng, zoom=17):
         print('setView:', lat, lng, zoom)
-        self.map_command('setView([{:f}, {:f}], {:d})'.format(lat, lng, zoom))
+        self.map_command('setView([{:f}, {:f}], {:d})'.format(lat, lng, zoom), return_value=False)
 
     def getCenter(self):
         res = self.map_command('getCenter()')
