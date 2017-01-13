@@ -8,9 +8,29 @@ L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     id: 'mapbox.streets'
 }).addTo(mymap);
 
-if(typeof QtWidget != 'undefined') {
-    var onMarkerClicked = function(e) { QtWidget.on_marker_clicked(this.options.marker_id) };
+var marker_dict = {};
 
+var add_markers_bulk = function(latlngs) {
+    //alert('Add bulk!')
+    var ids = [];
+    for (i=0; i < latlngs.length; ++i) {
+        marker = L.marker(latlngs[i]);
+        marker.addTo(mymap);
+        marker.on('click', onMarkerClicked);
+
+        var id = L.stamp(marker);
+        marker_dict[id] = marker;
+
+        ids.push(id);
+    }
+
+    //alert(ids);
+    return ids;
+}
+
+if(typeof QtWidget != 'undefined') {
+    //var onMarkerClicked = function(e) { QtWidget.onMarkerClicked(this.options.marker_id) };
+    var onMarkerClicked = function(e) { QtWidget.onMarkerClicked(L.stamp(this)) };
     var onMapMove = function() { QtWidget.onMove() };
     mymap.on('move', onMapMove);
 }

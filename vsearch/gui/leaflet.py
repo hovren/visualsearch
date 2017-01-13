@@ -16,6 +16,7 @@ class LeafletWidget(QWebView):
 
     onMove = pyqtSignal()
     onClick = pyqtSignal()
+    onMarkerClicked = pyqtSignal(int)
 
     next_marker_id = 0
 
@@ -58,16 +59,16 @@ class LeafletWidget(QWebView):
         res = self.map_command('getBounds()')
         return res['_southWest']['lat'], res['_southWest']['lng'], res['_northEast']['lat'], res['_northEast']['lng']
 
-    @pyqtSlot(int)
-    def on_marker_clicked(self, marker_id):
-        print('Marker with id {:d} clicked'.format(marker_id))
-
     def add_marker(self, lat, lng):
-        js_fmt = """marker = L.marker([{:f},{:f}], {{ marker_id: {:d} }}).addTo(mymap);
-marker.on('click', onMarkerClicked);"""
+        return self.add_markers_bulk([[lat, lng]])[0]
 
-        marker_id = self.next_marker_id
-        js = js_fmt.format(lat, lng, marker_id)
+    def add_markers_bulk(self, latlngs):
+        import json
+        js = "add_markers_bulk({});".format(json.dumps(latlngs))
+        return self.run_js(js)
+
+    def clear_marker(self, marker_id):
+        js = """marker_dict[{:d}].remove();""".format(marker_id)
+        #js = """mymap.removeLayer(marker_dict[{:d}]);""".format(marker_id)
         self.run_js(js)
-        self.next_marker_id += 1
-        return marker_id
+        self.update()
