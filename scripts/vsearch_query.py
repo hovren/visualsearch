@@ -16,23 +16,24 @@ NKPG_LAT, NKPG_LNG = 58.58923, 16.18035
 class MainWindow(w.QMainWindow):
     def __init__(self):
         self.database = None
-        self.marker_id_to_key = {}
+        self.marker_id_mapping = {}
 
         super().__init__()
         self.setup_ui()
         self.show()
 
     def marker_clicked(self, marker_id):
-        key = self.marker_id_to_key[marker_id]
-        print('Marker with ID {} and key {}'.format(marker_id, key))
+        key, marker = self.marker_id_mapping[marker_id]
+        print('Marker with ID {} and key {}'.format(marker.id, key))
         database_dir = '/home/hannes/Datasets/narrative2'
         path = os.path.join(database_dir, key + '.jpg')
         img = cv2.imread(path)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         self.preview_image.set_array(img)
 
-        print('Removing', marker_id)
-        self.map_view.clear_marker(marker_id)
+        for (key, other) in self.marker_id_mapping.values():
+            if not other is marker:
+                other.setOpacity(0.5)
 
     def setup_ui(self):
         self.setWindowTitle('Visual search tool')
@@ -81,6 +82,8 @@ class MainWindow(w.QMainWindow):
 
         sw_lat, sw_lng, ne_lat, ne_lng = self.map_view.getBounds()
 
+        from vsearch.gui.leaflet import LeafletMarker
+
         latlngs = []
         keys = []
         for key in self.database.image_vectors:
@@ -89,11 +92,10 @@ class MainWindow(w.QMainWindow):
             latlngs.append([lat, lng])
             keys.append(key)
 
-        marker_ids = self.map_view.add_markers_bulk(latlngs)
+        markers = LeafletMarker.add_to_map(self.map_view, latlngs)
 
-        for key, mid in zip(keys, marker_ids):
-            mid = int(mid)
-            self.marker_id_to_key[mid] = key
+        for key, m in zip(keys, markers):
+            self.marker_id_mapping[m.id] = (key, m)
 
 if __name__ == "__main__":
     app = w.QApplication(sys.argv)

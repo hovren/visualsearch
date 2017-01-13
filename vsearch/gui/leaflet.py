@@ -8,9 +8,53 @@ MAP_HTML = os.path.join(RESOURCE_DIR, 'map.html')
 MAP_JS = os.path.join(RESOURCE_DIR, 'map.js')
 
 class LeafletMarker:
-    def __init__(self, lat, lng):
-        self.lat = lat
-        self.lng = lng
+    def __init__(self, id, widget):
+        self.id = id
+        self.map_widget = widget
+
+    def __repr__(self):
+        return '<LeafletMarker id={:d} widget={}>'.format(self.id, self.map_widget)
+
+    def get_property(self, property):
+        js_fmt = "marker_dict[{id:d}].{property:s}"
+        js = js_fmt.format(self.id, property)
+        return self.map_widget.run_js(js)
+
+    def remove(self, update=True):
+        js = "marker_dict[{id:d}].remove(); delete marker_dict[{id:d}]; alert(Object.keys(marker_dict).length);".format(id=self.id)
+        self.map_widget.run_js(js)
+        self.id = None
+
+        if update:
+            self.map_widget.update()
+
+    def setOpacity(self, opacity):
+        js = "marker_dict[{:d}].setOpacity({:f});".format(self.id, opacity)
+        self.map_widget.run_js(js, return_value=False)
+
+    @classmethod
+    def create_js(cls, lat, lng):
+        js_fmt = """L.marker([{lat}, {lng}])"""
+        return js_fmt.format(lat=lat, lng=lng)
+
+    @classmethod
+    def add_to_map(cls, map_widget, latlng_list):
+        print(len(latlng_list))
+        statements = ["var ids = [];"]
+        for lat, lng in latlng_list:
+            statements.append("var marker = " + cls.create_js(lat, lng) + ";")
+            statements.append("marker.addTo(mymap);")
+            statements.append("marker.on('click', onMarkerClicked);")
+            statements.append("var id = L.stamp(marker);")
+            statements.append("marker_dict[id] = marker;")
+            statements.append("ids.push(id);")
+        statements.append("ids")
+
+        js = "\n".join(statements)
+        marker_ids = map_widget.run_js(js)
+
+        markers = [cls(int(mid), map_widget) for mid in marker_ids]
+        return markers
 
 class LeafletWidget(QWebView):
 
@@ -44,8 +88,11 @@ class LeafletWidget(QWebView):
         js_str = 'mymap.{};'.format(map_command_str)
         return self.run_js(js_str)
 
-    def run_js(self, js_str):
-        return self.frame.evaluateJavaScript(js_str)
+    def run_js(self, js_str, return_value=True):
+        if return_value:
+            return self.frame.evaluateJavaScript(js_str)
+        else:
+            return self.frame.evaluateJavaScript(js_str + "; null;")
 
     def setView(self, lat, lng, zoom=17):
         print('setView:', lat, lng, zoom)
@@ -58,17 +105,3 @@ class LeafletWidget(QWebView):
     def getBounds(self):
         res = self.map_command('getBounds()')
         return res['_southWest']['lat'], res['_southWest']['lng'], res['_northEast']['lat'], res['_northEast']['lng']
-
-    def add_marker(self, lat, lng):
-        return self.add_markers_bulk([[lat, lng]])[0]
-
-    def add_markers_bulk(self, latlngs):
-        import json
-        js = "add_markers_bulk({});".format(json.dumps(latlngs))
-        return self.run_js(js)
-
-    def clear_marker(self, marker_id):
-        js = """marker_dict[{:d}].remove();""".format(marker_id)
-        #js = """mymap.removeLayer(marker_dict[{:d}]);""".format(marker_id)
-        self.run_js(js)
-        self.update()
