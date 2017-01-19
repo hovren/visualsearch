@@ -16,9 +16,14 @@ class LeafletMarker:
         return '<LeafletMarker id={:d} widget={}>'.format(self.id, self.map_widget)
 
     def get_property(self, property):
-        js_fmt = "marker_dict[{:d}].{:s}"
+        js_fmt = "marker_dict[{:d}].{:s};"
         js = js_fmt.format(self.id, property)
         return self.map_widget.run_js(js)
+
+    @property
+    def latlng(self):
+        res = self.get_property('getLatLng()')
+        return res['lat'], res['lng']
 
     def object_call(self, js_method, return_value=True):
         js = 'marker_dict[{:d}].'.format(self.id) + js_method
