@@ -37,6 +37,7 @@ class ImageWidget(QLabel):
 
     def update_image(self):
         if self.image_array is None:
+            self.clear()
             return
 
         height, width, channels = self.image_array.shape
