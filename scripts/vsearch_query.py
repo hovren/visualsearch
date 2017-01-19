@@ -173,12 +173,22 @@ class DatabasePage(w.QWidget):
         self.image.setMinimumSize(QSize(256, 256))
         self.image_list = w.QListWidget()
         self.image_list.currentItemChanged.connect(self.on_item_changed)
+
         clear_button = w.QPushButton("Clear selection")
         clear_button.clicked.connect(lambda: self.image_list.setCurrentItem(None))
 
+        save_location_button = w.QPushButton("Save location")
+        save_location_button.clicked.connect(self.save_location_clicked)
+
+        button_box = w.QHBoxLayout()
+        button_box.addWidget(clear_button)
+        button_box.addWidget(save_location_button)
+
+
         vbox = w.QVBoxLayout()
         vbox.addWidget(self.image_list)
-        vbox.addWidget(clear_button)
+        #vbox.addWidget(clear_button)
+        vbox.addLayout(button_box)
         vbox.addWidget(self.image)
         self.setLayout(vbox)
 
@@ -187,6 +197,17 @@ class DatabasePage(w.QWidget):
             return
         self.database.remove_all_markers()
         self.database.add_all_markers()
+
+    def save_location_clicked(self):
+        item = self.image_list.currentItem()
+        if item:
+            key = item.text()
+            marker = self.database.marker_for_key(key)
+            latlng = LatLng(*marker.latlng)
+            old = self.database[key]
+            new = DatabaseEntry(old.key, old.bow, latlng)
+            self.database[key] = new
+
 
     def select_by_marker(self, marker_id):
         key = self.database.key_for_marker(marker_id)
