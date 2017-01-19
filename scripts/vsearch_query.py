@@ -18,12 +18,31 @@ QUERY_TAB = 0
 DATABASE_TAB = 1
 
 
-class DatabaseWithLocationAndMarkers(DatabaseWithLocation):
-    def __init__(self, visualdb, map_widget):
+class GuiWrappedDatabase(DatabaseWithLocation):
+    def __init__(self, visualdb, map_widget, image_root, geofile_path):
         super().__init__(visualdb)
+        self.image_root = image_root
+        self.geofile_path = geofile_path
         self.map_widget = map_widget
         self._marker_id_to_key = {}
         self._key_to_marker_id = {}
+
+        self.load_from_geofile()
+
+    def load_from_geofile(self):
+        if not (self.geofile_path and os.path.exists(self.geofile_path)):
+            return
+
+        with open(self.geofile_path, 'r') as f:
+            for line in f:
+                try:
+                    key, lat, lng = line.split(",")
+                except ValueError:
+                    pass
+                key = key.strip()
+                latlng = LatLng(float(lat), float(lng))
+                old = self[key]
+                new = DatabaseEntry(old.key, old.bow, latlng)
 
     def remove_all_markers(self):
         self.map_widget.remove_all_markers()
@@ -32,21 +51,23 @@ class DatabaseWithLocationAndMarkers(DatabaseWithLocation):
 
     def add_marker_for_key(self, key):
         if key not in self._key_to_marker_id:
-            print('Adding marker')
-            marker, *_ = LeafletMarker.add_to_map(self.map_widget, [self[key].latlng])
-            self._marker_id_to_key[marker.id] = key
-            self._key_to_marker_id[key] = marker.id
-            return marker
-        else:
-            print('Marker already existed for key', key)
+            latlng = self[key].latlng
+            if latlng:
+                marker, *_ = LeafletMarker.add_to_map(self.map_widget, [latlng])
+                self._marker_id_to_key[marker.id] = key
+                self._key_to_marker_id[key] = marker.id
+                return marker
+        raise KeyError("Failed to add marker for key '{}'".format(key))
 
     def add_all_markers(self):
-        keys, latlngs = zip(*[(key, e.latlng) for key, e in self.items()])
-        markers = LeafletMarker.add_to_map(self.map_widget, latlngs)
-        d1 = {m.id: key for m, key in zip(markers, keys)}
-        d2 = {key: m.id for m, key in zip(markers, keys)}
-        self._marker_id_to_key.update(d1)
-        self._key_to_marker_id.update(d2)
+        pairs = [(key, e.latlng) for key, e in self.items() if e.latlng is not None]
+        if pairs:
+            keys, latlngs = zip(*pairs)
+            markers = LeafletMarker.add_to_map(self.map_widget, latlngs)
+            d1 = {m.id: key for m, key in zip(markers, keys)}
+            d2 = {key: m.id for m, key in zip(markers, keys)}
+            self._marker_id_to_key.update(d1)
+            self._key_to_marker_id.update(d2)
 
     def key_for_marker(self, marker_id):
         return self._marker_id_to_key[marker_id]
@@ -54,6 +75,12 @@ class DatabaseWithLocationAndMarkers(DatabaseWithLocation):
     def marker_for_key(self, key):
         mid = self._key_to_marker_id[key]
         return self.map_widget.markers[mid]
+
+    def update_location(self, key, latlng):
+        old = self[key]
+        new = DatabaseEntry(old.key, old.bow, latlng)
+        self[key] = new
+
 
 class MainWindow(w.QMainWindow):
     def __init__(self):
@@ -80,7 +107,14 @@ class MainWindow(w.QMainWindow):
         tab_widget.currentChanged.connect(self.tab_changed)
 
         load_database_button = w.QPushButton("Load database")
-        load_database_button.clicked.connect(lambda *args: self.load_database('../test/test_db.h5'))
+
+        def load_db():
+            dialog = LoadDatabaseDialog(self)
+            if dialog.exec_():
+                self.load_database(dialog.db_path, dialog.image_root, dialog.geofile)
+
+
+        load_database_button.clicked.connect(load_db)
 
         clear_markers_button = w.QPushButton("Clear markers")
         clear_markers_button.clicked.connect(lambda *args: self.map_view.clear_markers())
@@ -114,22 +148,10 @@ class MainWindow(w.QMainWindow):
         print('clicked marker #{:d}'.format(marker_id))
         if self.tab_widget.currentIndex() == DATABASE_TAB:
             self.database_page.select_by_marker(marker_id)
-        else:
-            key, marker = self.marker_id_mapping[marker_id]
-            print('Marker with ID {} and key {}'.format(marker.id, key))
-            database_dir = '/home/hannes/Datasets/narrative2'
-            path = os.path.join(database_dir, key + '.jpg')
-            img = cv2.imread(path)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            self.preview_image.set_array(img)
-
-            for (key, other) in self.marker_id_mapping.values():
-                if not other is marker:
-                    other.setOpacity(0.5)
 
     def map_clicked(self, lat, lng):
         if self.tab_widget.currentIndex() == DATABASE_TAB:
-            pass
+            self.database_page.on_map_click(lat, lng)
 
     def tab_changed(self, tabnr):
         if tabnr == 0: # Query
@@ -143,30 +165,33 @@ class MainWindow(w.QMainWindow):
         self.database_page.image_list.setCurrentItem(None)
 
 
-    def load_database(self, path):
+    def load_database(self, path, image_root, geofile_path):
         visual_database = AnnDatabase.from_file(path)
-        #self.database = DatabaseWithLocation(visual_database)
-        self.database = DatabaseWithLocationAndMarkers(visual_database, self.map_view)
+        self.database = GuiWrappedDatabase(visual_database, self.map_view, image_root, geofile_path)
 
-        sw_lat, sw_lng, ne_lat, ne_lng = self.map_view.getBounds()
+        if False:
+            sw_lat, sw_lng, ne_lat, ne_lng = self.map_view.getBounds()
+            for key, entry in self.database.items():
+                lat = np.random.uniform(sw_lat, ne_lat)
+                lng = np.random.uniform(sw_lng, ne_lng)
+                self.database.update_location(key, LatLng(lat, lng))
+                item = w.QListWidgetItem(key)
+                self.database_page.image_list.addItem(item)
 
-        for key, entry in self.database.items():
-            lat = np.random.uniform(sw_lat, ne_lat)
-            lng = np.random.uniform(sw_lng, ne_lng)
-            new_entry = DatabaseEntry(key, entry.bow, LatLng(lat, lng))
-            self.database[key] = new_entry
-            item = w.QListWidgetItem(key)
-            self.database_page.image_list.addItem(item)
-
-        self.database_page.database = self.database
+        self.database_page.load_database(self.database)
         self.tab_widget.setCurrentIndex(DATABASE_TAB)
 
 
 class DatabasePage(w.QWidget):
-    def __init__(self, database, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent=parent)
-        self.database = database
+        self.database = None
         self.setup_ui()
+
+    def load_database(self, database):
+        self.database = database
+        for key in database:
+            self.image_list.addItem(w.QListWidgetItem(key))
 
     def setup_ui(self):
         self.image = ImageWidget()
@@ -204,10 +229,19 @@ class DatabasePage(w.QWidget):
             key = item.text()
             marker = self.database.marker_for_key(key)
             latlng = LatLng(*marker.latlng)
-            old = self.database[key]
-            new = DatabaseEntry(old.key, old.bow, latlng)
-            self.database[key] = new
+            self.database.update_location(key, latlng)
 
+    def on_map_click(self, lat, lng):
+        # Update only if an item is selected and doesn't already have a marker on the map
+        item = self.image_list.currentItem()
+        if item:
+            key = item.text()
+            try:
+                marker = self.database.marker_for_key(key)
+            except KeyError:
+                self.database.update_location(key, LatLng(lat, lng))
+                marker = self.database.add_marker_for_key(key)
+                marker.setDraggable(True)
 
     def select_by_marker(self, marker_id):
         key = self.database.key_for_marker(marker_id)
@@ -232,15 +266,17 @@ class DatabasePage(w.QWidget):
             self.on_enter()
         elif self.database is not None:
             key = current.text()
-            marker = self.database.add_marker_for_key(key)
-            print(marker)
             entry = self.database[key]
-            path = os.path.join('/home/hannes/Datasets/narrative2/', entry.key + '.jpg')
+            path = os.path.join(self.database.image_root, entry.key + '.jpg')
             image = cv2.imread(path)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             self.image.set_array(image)
 
-            marker.setDraggable(True)
+            try:
+                marker = self.database.add_marker_for_key(key)
+                marker.setDraggable(True)
+            except KeyError:
+                pass
 
 
 
@@ -259,6 +295,67 @@ class QueryPage(w.QWidget):
         vbox.addWidget(self.query_image)
         vbox.addWidget(self.preview_image)
         self.setLayout(vbox)
+
+
+class LineFileChooser(w.QWidget):
+    def __init__(self, directory=False, parent=None, **kwargs):
+        super().__init__(parent=parent)
+        self.kwargs = kwargs
+        self.line = w.QLineEdit()
+        self.line.setEnabled(False)
+        self.is_directory = directory
+        self.button = w.QPushButton("Select")
+        self.button.clicked.connect(self.load_file)
+        hbox = w.QHBoxLayout()
+        hbox.addWidget(self.line)
+        hbox.addWidget(self.button)
+        self.setLayout(hbox)
+
+    def load_file(self):
+        if self.is_directory:
+            path = w.QFileDialog.getExistingDirectory(**self.kwargs)
+        else:
+            path, _ = w.QFileDialog.getOpenFileName(**self.kwargs)
+
+        self.line.setText(path)
+
+
+class LoadDatabaseDialog(w.QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent=parent)
+        self.setModal(True)
+        self.setWindowTitle("Load database")
+        self._db_path = LineFileChooser(filter='*.h5')
+        width = 400
+        self._db_path.setMinimumWidth(width)
+        self._image_root = LineFileChooser(directory=True)
+        self._db_path.setMinimumWidth(width)
+        self._geofile = LineFileChooser(filter='*.csv')
+        self._geofile.setMinimumWidth(width)
+
+        bb = w.QDialogButtonBox(w.QDialogButtonBox.Ok | w.QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+
+        form = w.QFormLayout()
+        form.addRow("Visual database", self._db_path)
+        form.addRow("Image root", self._image_root)
+        form.addRow("Location file", self._geofile)
+        form.addWidget(bb)
+
+        self.setLayout(form)
+
+    @property
+    def db_path(self):
+        return self._db_path.line.text()
+
+    @property
+    def image_root(self):
+        return self._image_root.line.text()
+
+    @property
+    def geofile(self):
+        return None
 
 
 if __name__ == "__main__":
