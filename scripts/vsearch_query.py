@@ -168,16 +168,6 @@ class MainWindow(w.QMainWindow):
     def load_database(self, path, image_root, geofile_path):
         visual_database = AnnDatabase.from_file(path)
         self.database = GuiWrappedDatabase(visual_database, self.map_view, image_root, geofile_path)
-
-        if False:
-            sw_lat, sw_lng, ne_lat, ne_lng = self.map_view.getBounds()
-            for key, entry in self.database.items():
-                lat = np.random.uniform(sw_lat, ne_lat)
-                lng = np.random.uniform(sw_lng, ne_lng)
-                self.database.update_location(key, LatLng(lat, lng))
-                item = w.QListWidgetItem(key)
-                self.database_page.image_list.addItem(item)
-
         self.database_page.load_database(self.database)
         self.tab_widget.setCurrentIndex(DATABASE_TAB)
 
