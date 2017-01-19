@@ -116,6 +116,7 @@ class AnnDatabase(BaseDatabase):
 
 class DatabaseWithLocation(collections.abc.MutableMapping):
     def __init__(self, visualdb):
+        super().__init__()
         self.visualdb = visualdb
         self.locations = collections.defaultdict(lambda: None)
 

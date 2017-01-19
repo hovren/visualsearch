@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 import PyQt5.QtWidgets as w
 from PyQt5.QtCore import QFileInfo, QUrl, QSize
+from PyQt5.QtCore import Qt
 
 from vsearch import AnnDatabase, DatabaseError
 from vsearch.database import LatLng, DatabaseEntry, DatabaseWithLocation
@@ -17,10 +18,46 @@ QUERY_TAB = 0
 DATABASE_TAB = 1
 
 
+class DatabaseWithLocationAndMarkers(DatabaseWithLocation):
+    def __init__(self, visualdb, map_widget):
+        super().__init__(visualdb)
+        self.map_widget = map_widget
+        self._marker_id_to_key = {}
+        self._key_to_marker_id = {}
+
+    def remove_all_markers(self):
+        self.map_widget.remove_all_markers()
+        self._marker_id_to_key.clear()
+        self._key_to_marker_id.clear()
+
+    def add_marker_for_key(self, key):
+        if key not in self._key_to_marker_id:
+            print('Adding marker')
+            marker, *_ = LeafletMarker.add_to_map(self.map_widget, [self[key].latlng])
+            self._marker_id_to_key[marker.id] = key
+            self._key_to_marker_id[key] = marker.id
+            return marker
+        else:
+            print('Marker already existed for key', key)
+
+    def add_all_markers(self):
+        keys, latlngs = zip(*[(key, e.latlng) for key, e in self.items()])
+        markers = LeafletMarker.add_to_map(self.map_widget, latlngs)
+        d1 = {m.id: key for m, key in zip(markers, keys)}
+        d2 = {key: m.id for m, key in zip(markers, keys)}
+        self._marker_id_to_key.update(d1)
+        self._key_to_marker_id.update(d2)
+
+    def key_for_marker(self, marker_id):
+        return self._marker_id_to_key[marker_id]
+
+    def marker_for_key(self, key):
+        mid = self._key_to_marker_id[key]
+        return self.map_widget.markers[mid]
+
 class MainWindow(w.QMainWindow):
     def __init__(self):
         self.database = None
-        self.marker_id_mapping = {}
 
         super().__init__()
         self.setup_ui()
@@ -56,8 +93,8 @@ class MainWindow(w.QMainWindow):
         tab2_layout = w.QVBoxLayout()
 
         self.query_page = QueryPage()
+        self.database_page = DatabasePage(self.database)
         tab_widget.addTab(self.query_page, "Query")
-        self.database_page = DatabasePage()
         tab_widget.addTab(self.database_page, "Database")
 
         hbox.addWidget(self.map_view)
@@ -74,17 +111,21 @@ class MainWindow(w.QMainWindow):
         self.setCentralWidget(dummy)
 
     def marker_clicked(self, marker_id):
-        key, marker = self.marker_id_mapping[marker_id]
-        print('Marker with ID {} and key {}'.format(marker.id, key))
-        database_dir = '/home/hannes/Datasets/narrative2'
-        path = os.path.join(database_dir, key + '.jpg')
-        img = cv2.imread(path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        self.preview_image.set_array(img)
+        print('clicked marker #{:d}'.format(marker_id))
+        if self.tab_widget.currentIndex() == DATABASE_TAB:
+            self.database_page.select_by_marker(marker_id)
+        else:
+            key, marker = self.marker_id_mapping[marker_id]
+            print('Marker with ID {} and key {}'.format(marker.id, key))
+            database_dir = '/home/hannes/Datasets/narrative2'
+            path = os.path.join(database_dir, key + '.jpg')
+            img = cv2.imread(path)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            self.preview_image.set_array(img)
 
-        for (key, other) in self.marker_id_mapping.values():
-            if not other is marker:
-                other.setOpacity(0.5)
+            for (key, other) in self.marker_id_mapping.values():
+                if not other is marker:
+                    other.setOpacity(0.5)
 
     def map_clicked(self, lat, lng):
         if self.tab_widget.currentIndex() == DATABASE_TAB:
@@ -94,52 +135,37 @@ class MainWindow(w.QMainWindow):
         if tabnr == 0: # Query
             self.enter_query_tab()
         elif tabnr == 1: # Database
-            self.enter_database_tab()
-
-    def remove_all_markers(self):
-        if self.marker_id_mapping:
-            print('Removing {:d} markers'.format(len(self.marker_id_mapping)))
-            for key, m in self.marker_id_mapping.values():
-                m.remove(update=False)
-            self.marker_id_mapping.clear()
-            self.map_view.update()
+            self.database_page.on_enter()
 
     def enter_query_tab(self):
         print('Query tab')
-        self.remove_all_markers()
-
-    def enter_database_tab(self):
-        print('Database tab')
-        if not self.image_locations:
-            return
-
-        self.remove_all_markers()
-        keys, latlngs = zip(*list(self.image_locations.items()))
-        markers = LeafletMarker.add_to_map(self.map_view, latlngs)
-
-        for key, m in zip(keys, markers):
-            self.marker_id_mapping[m.id] = (key, m)
+        self.map_view.remove_all_markers()
+        self.database_page.image_list.setCurrentItem(None)
 
 
     def load_database(self, path):
         visual_database = AnnDatabase.from_file(path)
-        self.database = DatabaseWithLocation(visual_database)
+        #self.database = DatabaseWithLocation(visual_database)
+        self.database = DatabaseWithLocationAndMarkers(visual_database, self.map_view)
 
         sw_lat, sw_lng, ne_lat, ne_lng = self.map_view.getBounds()
 
-        for key in self.database:
+        for key, entry in self.database.items():
             lat = np.random.uniform(sw_lat, ne_lat)
             lng = np.random.uniform(sw_lng, ne_lng)
-            self.image_locations[key] = LatLng(lat, lng)
+            new_entry = DatabaseEntry(key, entry.bow, LatLng(lat, lng))
+            self.database[key] = new_entry
             item = w.QListWidgetItem(key)
             self.database_page.image_list.addItem(item)
 
+        self.database_page.database = self.database
         self.tab_widget.setCurrentIndex(DATABASE_TAB)
 
 
 class DatabasePage(w.QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, database, parent=None):
         super().__init__(parent=parent)
+        self.database = database
         self.setup_ui()
 
     def setup_ui(self):
@@ -156,12 +182,45 @@ class DatabasePage(w.QWidget):
         vbox.addWidget(self.image)
         self.setLayout(vbox)
 
+    def on_enter(self):
+        if not self.database:
+            return
+        self.database.remove_all_markers()
+        self.database.add_all_markers()
+
+    def select_by_marker(self, marker_id):
+        key = self.database.key_for_marker(marker_id)
+        print('{:d} -> {:s}'.format(marker_id, key))
+        return self.select_by_key(key)
+
+    def select_by_key(self, key):
+        items = self.image_list.findItems(key, Qt.MatchExactly)
+        if len(items) > 1:
+            raise ValueError("List contained multiple entries with same key")
+        elif len(items) < 1:
+            raise ValueError("No such key in item list")
+        else:
+            item = items[0]
+            self.image_list.setCurrentItem(item)
+
     def on_item_changed(self, current, prev):
+        self.database.remove_all_markers()
+
         if current is None:
             self.image.set_array(None)
-            self.populate()
-        else:
-            print(self.parent().database)
+            self.on_enter()
+        elif self.database is not None:
+            key = current.text()
+            marker = self.database.add_marker_for_key(key)
+            print(marker)
+            entry = self.database[key]
+            path = os.path.join('/home/hannes/Datasets/narrative2/', entry.key + '.jpg')
+            image = cv2.imread(path)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            self.image.set_array(image)
+
+            marker.setDraggable(True)
+
 
 
 class QueryPage(w.QWidget):

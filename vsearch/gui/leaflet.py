@@ -63,6 +63,8 @@ class LeafletMarker:
         marker_ids = map_widget.run_js(js)
 
         markers = [cls(int(mid), map_widget) for mid in marker_ids]
+        map_widget.markers.update({m.id: m for m in markers})
+
         return markers
 
 class LeafletWidget(QWebView):
@@ -77,6 +79,7 @@ class LeafletWidget(QWebView):
         print('Creating LeafletWidget')
         super().__init__(parent=parent)
         page = self.page()
+        self.markers = {}
         self.frame = page.mainFrame()
 
         self.frame.addToJavaScriptWindowObject("QtWidget", self)
@@ -114,3 +117,13 @@ class LeafletWidget(QWebView):
     def getBounds(self):
         res = self.map_command('getBounds()')
         return res['_southWest']['lat'], res['_southWest']['lng'], res['_northEast']['lat'], res['_northEast']['lng']
+
+    def remove_all_markers(self):
+        if self.markers:
+            print('Removing {:d} markers'.format(len(self.markers)))
+            for m in self.markers.values():
+                m.remove(update=False)
+            self.markers.clear()
+            self.update()
+        else:
+            print('No markers to remove')
