@@ -7,6 +7,7 @@ import cv2
 import PyQt5.QtWidgets as w
 from PyQt5.QtCore import QFileInfo, QUrl, QSize
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon
 
 from vsearch import AnnDatabase, DatabaseError
 from vsearch.database import LatLng, DatabaseEntry, DatabaseWithLocation
@@ -209,17 +210,24 @@ class DatabasePage(w.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
         self.database = None
+        self._icon = QIcon.fromTheme("applications-internet")
         self.setup_ui()
 
     def load_database(self, database):
         self.database = database
-        for key in database:
-            self.image_list.addItem(w.QListWidgetItem(key))
+        for key, entry in database.items():
+            item = w.QListWidgetItem(key)
+            if entry.latlng:
+                item.setIcon(self._icon)
+            self.image_list.addItem(item)
+
+        self.image_list.sortItems()
 
     def setup_ui(self):
         self.image = ImageWidget()
         self.image.setMinimumSize(QSize(256, 256))
         self.image_list = w.QListWidget()
+        self.image_list.setIconSize(QSize(16, 16))
         self.image_list.currentItemChanged.connect(self.on_item_changed)
 
         clear_button = w.QPushButton("Clear selection")
@@ -271,6 +279,7 @@ class DatabasePage(w.QWidget):
             except KeyError:
                 self.database.update_location(key, LatLng(lat, lng))
                 marker = self.database.add_marker_for_key(key)
+                item.setIcon(self._icon)
                 marker.setDraggable(True)
 
     def select_by_marker(self, marker_id):
@@ -399,6 +408,6 @@ if __name__ == "__main__":
     timer = QTimer(mwin)
     timer.setSingleShot(True)
     timer.timeout.connect(on_load)
-    timer.start(1000)
+    timer.start(2000)
 
     sys.exit(app.exec_())
