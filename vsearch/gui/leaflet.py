@@ -1,7 +1,7 @@
 import os
 
 from PyQt5.QtWebKitWidgets import QWebView
-from PyQt5.QtCore import QFileInfo, QUrl, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QFileInfo, QUrl, pyqtSignal, pyqtSlot, QWaitCondition, QMutex
 
 RESOURCE_DIR = os.path.dirname(__file__)
 MAP_HTML = os.path.join(RESOURCE_DIR, 'map.html')
@@ -32,10 +32,12 @@ class LeafletMarker:
     def remove(self, update=True):
         js = "marker_dict[{id:d}].remove(); delete marker_dict[{id:d}];".format(id=self.id)
         self.map_widget.run_js(js)
-        self.id = None
 
         if update:
+            self.map_widget.on_marker_removed(self.id)
             self.map_widget.update()
+
+        self.id = None
 
     def setDraggable(self, draggable):
         if draggable:
@@ -53,7 +55,7 @@ class LeafletMarker:
 
     @classmethod
     def add_to_map(cls, map_widget, latlng_list):
-        print(len(latlng_list))
+        print('latlnglist', latlng_list)
         statements = ["var ids = [];"]
         for lat, lng in latlng_list:
             statements.append("var marker = " + cls.create_js(lat, lng) + ";")
@@ -123,11 +125,15 @@ class LeafletWidget(QWebView):
         res = self.map_command('getBounds()')
         return res['_southWest']['lat'], res['_southWest']['lng'], res['_northEast']['lat'], res['_northEast']['lng']
 
+    def on_marker_removed(self, marker_id):
+        del self.markers[marker_id]
+
     def remove_all_markers(self):
         if self.markers:
             print('Removing {:d} markers'.format(len(self.markers)))
             for m in self.markers.values():
                 m.remove(update=False)
+
             self.markers.clear()
             self.update()
         else:
