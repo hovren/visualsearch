@@ -61,6 +61,7 @@ class LeafletMarker:
             statements.append("var marker = " + cls.create_js(lat, lng) + ";")
             statements.append("marker.addTo(mymap);")
             statements.append("marker.on('click', onMarkerClicked);")
+            statements.append("marker.on('moveend', onMarkerMoveEnded);")
             statements.append("var id = L.stamp(marker);")
             statements.append("marker_dict[id] = marker;")
             statements.append("ids.push(id);")
@@ -79,6 +80,7 @@ class LeafletWidget(QWebView):
     onMove = pyqtSignal()
     onClick = pyqtSignal(float, float)
     onMarkerClicked = pyqtSignal(int)
+    onMarkerMoved = pyqtSignal(int)
 
     next_marker_id = 0
 

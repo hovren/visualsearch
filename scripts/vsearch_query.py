@@ -107,6 +107,7 @@ class MainWindow(w.QMainWindow):
         # Widgets
         self.map_view = LeafletWidget(NORRKOPING.lat, NORRKOPING.lng)
         self.map_view.onMarkerClicked.connect(self.marker_clicked)
+        self.map_view.onMarkerMoved.connect(self.marker_moved)
         self.map_view.onClick.connect(self.map_clicked)
 
         self.query_image = ImageWidget()
@@ -163,6 +164,12 @@ class MainWindow(w.QMainWindow):
         print('clicked marker #{:d}'.format(marker_id))
         if self.tab_widget.currentIndex() == DATABASE_TAB:
             self.database_page.select_by_marker(marker_id)
+
+    def marker_moved(self, marker_id):
+        print('Moved marker', marker_id)
+        if self.tab_widget.currentIndex() == DATABASE_TAB:
+            m = self.map_view.markers[marker_id]
+            self.database_page.on_marker_moved(marker_id, LatLng(*m.latlng))
 
     def map_clicked(self, lat, lng):
         if self.tab_widget.currentIndex() == DATABASE_TAB:
@@ -238,6 +245,10 @@ class DatabasePage(w.QWidget):
             return
         self.database.remove_all_markers()
         self.database.add_all_markers()
+
+    def on_marker_moved(self, marker_id, latlng):
+        key = self.database.key_for_marker(marker_id)
+        self.database.update_location(key, latlng)
 
     def clear_location_clicked(self):
         item = self.image_list.currentItem()
