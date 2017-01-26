@@ -166,6 +166,8 @@ class MainWindow(w.QMainWindow):
         print('clicked marker #{:d}'.format(marker_id))
         if self.tab_widget.currentIndex() == DATABASE_TAB:
             self.database_page.select_by_marker(marker_id)
+        elif self.tab_widget.currentIndex() == QUERY_TAB:
+            self.query_page.select_by_marker(marker_id)
 
     def marker_moved(self, marker_id):
         print('Moved marker', marker_id)
@@ -176,6 +178,8 @@ class MainWindow(w.QMainWindow):
     def map_clicked(self, lat, lng):
         if self.tab_widget.currentIndex() == DATABASE_TAB:
             self.database_page.on_map_click(lat, lng)
+        elif self.tab_widget.currentIndex() == QUERY_TAB:
+            self.query_page.on_map_click(lat, lng)
 
     def tab_changed(self, tabnr):
         if tabnr == 0: # Query
@@ -325,6 +329,7 @@ class QueryPage(w.QWidget):
     def __init__(self, database):
         super().__init__()
         self.database = database
+        self.matches = []
         self.setup_ui()
 
     def setup_ui(self):
@@ -334,16 +339,40 @@ class QueryPage(w.QWidget):
         self.preview_image = ImageWidget()
         self.preview_image.setMinimumSize(QSize(256, 256))
         self.result_list = w.QListWidget()
+        self.result_list.setMinimumHeight(150)
+        self.result_list.currentItemChanged.connect(self.on_item_changed)
         edit_query_button = w.QPushButton("Query")
         edit_query_button.clicked.connect(self.on_set_query)
+        clear_button = w.QPushButton("Clear selection")
+        clear_button.clicked.connect(lambda: self.result_list.setCurrentItem(None))
 
         vbox = w.QVBoxLayout()
         vbox.addWidget(edit_query_button)
         vbox.addWidget(self.query_image)
         vbox.addWidget(w.QLabel("Result list"))
         vbox.addWidget(self.result_list)
+        vbox.addWidget(clear_button)
+
         vbox.addWidget(self.preview_image)
         self.setLayout(vbox)
+
+    def on_item_changed(self, current, prev):
+        self.database.remove_all_markers()
+
+        if current is None:
+            self.preview_image.set_array(None)
+            self.add_markers_for_matches()
+        else:
+            key, *_ = current.text().split(" ")
+            entry = self.database[key]
+            path = os.path.join(self.database.image_root, entry.key)
+            image = cv2.imread(path)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            self.preview_image.set_array(image)
+            try:
+                marker = self.database.add_marker_for_key(key)
+            except KeyError:
+                pass
 
     def on_set_query(self):
         if self.query_dialog.exec_():
@@ -371,9 +400,35 @@ class QueryPage(w.QWidget):
             progress.show()
             self._search_thread.start()
 
+    def add_markers_for_matches(self):
+        for entry, score in self.matches:
+            self.database.add_marker_for_key(entry.key)
+
     def on_search_done(self, matches):
-        for key, score in matches:
-            self.result_list.addItem(key)
+        self.matches = matches
+        for entry, score in matches:
+            text = "{} ({:.4f})".format(entry.key, score)
+            self.result_list.addItem(text)
+        self.database.remove_all_markers()
+        self.add_markers_for_matches()
+
+    def on_map_click(self, lat, lng):
+        self.result_list.setCurrentItem(None)
+
+    def select_by_marker(self, marker_id):
+        key = self.database.key_for_marker(marker_id)
+        print('{:d} -> {:s}'.format(marker_id, key))
+        return self.select_by_key(key)
+
+    def select_by_key(self, key):
+        items = self.result_list.findItems(key, Qt.MatchStartsWith)
+        if len(items) > 1:
+            raise ValueError("List contained multiple entries with same key")
+        elif len(items) < 1:
+            raise ValueError("No such key in item list")
+        else:
+            item = items[0]
+            self.result_list.setCurrentItem(item)
 
 
 
@@ -448,18 +503,17 @@ class SearchThread(QThread):
             self.progress_update.emit(10, "Calculating SIFT features")
             descriptors, keypoints = calculate_sift(self.image, roi=self.roi)
 
-        self.progress_update.emit(30, "Searching database")
-
-        import numpy as np
-        import time
         print('num keypoints:', len(keypoints))
         print('descriptor shape:', descriptors.shape)
         print('Searching...')
-        self.progress_update.emit(100, "Done")
 
-        keys = list(self.database.keys())
-        scores = np.random.uniform(0.2, 0.98, size=10)
-        self.finished.emit(list(zip(keys, scores)))
+        self.progress_update.emit(30, "Searching database")
+
+        matches = self.database.query(descriptors)
+        max_matches = 10
+
+        self.progress_update.emit(100, "Finished")
+        self.finished.emit(matches[:max_matches])
 
 
 class LineFileChooser(w.QWidget):
@@ -528,7 +582,7 @@ if __name__ == "__main__":
     mwin = MainWindow()
 
     def on_load():
-        mwin.load_database('/home/hannes/Projects/VS-imsearch/test/test_db.h5', '/home/hannes/Datasets/narrative2')
+        mwin.load_database('/home/hannes/Projects/VS-imsearch/db_sift_2k.h5', '/home/hannes/Datasets/narrative2')
 
     from PyQt5.QtCore import QTimer
     timer = QTimer(mwin)
