@@ -145,14 +145,15 @@ class MainWindow(w.QMainWindow):
         tab_widget.addTab(self.query_page, "Query")
         tab_widget.addTab(self.database_page, "Database")
 
-        hbox.addWidget(self.map_view)
-        hbox.addWidget(tab_widget)
+        splitter = w.QSplitter(self)
+        splitter.addWidget(self.map_view)
+        splitter.addWidget(tab_widget)
 
         button_hbox.addWidget(load_database_button)
         button_hbox.addWidget(save_geo_button)
 
         vbox1.addLayout(button_hbox)
-        vbox1.addLayout(hbox)
+        vbox1.addWidget(splitter)
 
         dummy = w.QWidget()
         dummy.setLayout(vbox1)
