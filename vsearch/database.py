@@ -139,3 +139,8 @@ class DatabaseWithLocation(collections.abc.MutableMapping):
             raise ValueError("Value is not an Entry")
         self.visualdb.image_vectors[key] = value.bow
         self.locations[key] = value.latlng
+
+    def query(self, descriptors):
+        visual_matches = self.visualdb.query(descriptors)
+        matches = [(self[key], score) for key, score in visual_matches]
+        return matches
