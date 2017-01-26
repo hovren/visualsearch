@@ -5,13 +5,14 @@ import collections
 import numpy as np
 import cv2
 import PyQt5.QtWidgets as w
-from PyQt5.QtCore import QFileInfo, QUrl, QSize
+from PyQt5.QtCore import QFileInfo, QUrl, QSize, QThread, pyqtSignal
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
 
 from vsearch import AnnDatabase, DatabaseError
 from vsearch.database import LatLng, DatabaseEntry, DatabaseWithLocation
 from vsearch.gui import ImageWidget, ImageWithROI, LeafletWidget, LeafletMarker
+from vsearch.utils import load_descriptors_and_keypoints, sift_file_for_image, filter_roi, calculate_sift
 
 NORRKOPING = LatLng(58.58923, 16.18035)
 
@@ -139,7 +140,7 @@ class MainWindow(w.QMainWindow):
         vbox2 = w.QVBoxLayout()
         tab2_layout = w.QVBoxLayout()
 
-        self.query_page = QueryPage()
+        self.query_page = QueryPage(self.database)
         self.database_page = DatabasePage(self.database)
         tab_widget.addTab(self.query_page, "Query")
         tab_widget.addTab(self.database_page, "Database")
@@ -203,6 +204,7 @@ class MainWindow(w.QMainWindow):
 
         self.database = GuiWrappedDatabase(visual_database, self.map_view, image_root, geofile_path)
         self.database_page.load_database(self.database)
+        self.query_page.database = self.database
         self.tab_widget.setCurrentIndex(DATABASE_TAB)
 
 
@@ -320,20 +322,144 @@ class DatabasePage(w.QWidget):
 
 
 class QueryPage(w.QWidget):
-    def __init__(self):
+    def __init__(self, database):
         super().__init__()
+        self.database = database
         self.setup_ui()
 
     def setup_ui(self):
         self.query_image = ImageWidget()
         self.query_image.setMinimumSize(QSize(256, 256))
+        self.query_dialog = QueryImageDialog(self)
         self.preview_image = ImageWidget()
         self.preview_image.setMinimumSize(QSize(256, 256))
+        self.result_list = w.QListWidget()
+        edit_query_button = w.QPushButton("Query")
+        edit_query_button.clicked.connect(self.on_set_query)
 
         vbox = w.QVBoxLayout()
+        vbox.addWidget(edit_query_button)
         vbox.addWidget(self.query_image)
+        vbox.addWidget(w.QLabel("Result list"))
+        vbox.addWidget(self.result_list)
         vbox.addWidget(self.preview_image)
         self.setLayout(vbox)
+
+    def on_set_query(self):
+        if self.query_dialog.exec_():
+            self.result_list.clear()
+
+            image_path = self.query_dialog.image_path
+            image, roi = self.query_dialog.image.get_image_and_roi()
+            x, y, width, height = roi
+            patch = np.copy(image[y:y+height, x:x+width])
+            self.query_image.set_array(patch)
+
+            self._search_thread = SearchThread(self.database, image, roi, image_path)
+
+            progress = w.QProgressDialog("Loading SIFT features", "Abort", 0, 100, parent=self)
+            progress.setModal(True)
+
+            def progress_cb(percentage, status):
+                print("[{:d}%] {}".format(percentage, status))
+                progress.setValue(percentage)
+                progress.setLabelText(status)
+            self._search_thread.progress_update.connect(progress_cb)
+
+            self._search_thread.finished.connect(self.on_search_done)
+
+            progress.show()
+            self._search_thread.start()
+
+    def on_search_done(self, matches):
+        for key, score in matches:
+            self.result_list.addItem(key)
+
+
+
+class QueryImageDialog(w.QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent=parent)
+
+        self.setModal(True)
+        self.setWindowTitle("Select Query Image")
+
+        self.image_path = None
+        self.image = ImageWithROI(self)
+        self.image.setMinimumSize(QSize(512, 512))
+        open_button = w.QPushButton("Select file")
+        open_button.clicked.connect(self.on_open)
+
+        instructions = w.QLabel("Open an image and use the mouse to select a region of interest.")
+
+        bb = w.QDialogButtonBox(w.QDialogButtonBox.Ok | w.QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+
+        vbox = w.QVBoxLayout()
+        vbox.addWidget(instructions)
+        vbox.addWidget(open_button)
+        vbox.addWidget(self.image)
+        vbox.addWidget(bb)
+
+        self.setLayout(vbox)
+
+    def on_open(self):
+        self.image_path, *_ = w.QFileDialog.getOpenFileName()
+        image = cv2.imread(self.image_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        self.image.set_array(image)
+
+    def accept(self):
+        try:
+            image, roi = self.image.get_image_and_roi()
+        except ValueError:
+            w.QErrorMessage(self).showMessage("No image selected!")
+            return False
+
+        if self.image.get_rubberband_rect() is None:
+            w.QErrorMessage(self).showMessage("No region of interest set!")
+            return False
+
+        print('All OK')
+        return super().accept()
+
+
+class SearchThread(QThread):
+    finished = pyqtSignal(list)
+    progress_update = pyqtSignal(int, str) # Percentage, text
+
+    def __init__(self, database, image, roi, image_path, parent=None):
+        super().__init__(parent)
+        self.database = database
+        self.image = image
+        self.image_path = image_path
+        self.roi = roi
+
+    def run(self):
+        sift_file = sift_file_for_image(self.image_path)
+        if os.path.exists(sift_file):
+            print('Loading SIFT features from', sift_file)
+            self.progress_update.emit(10, "Loading SIFT features")
+            descriptors, keypoints = load_descriptors_and_keypoints(sift_file)
+            descriptors, keypoints = filter_roi(descriptors, keypoints, self.roi)
+        else:
+            print('Calculating SIFT features in patch')
+            self.progress_update.emit(10, "Calculating SIFT features")
+            descriptors, keypoints = calculate_sift(self.image, roi=self.roi)
+
+        self.progress_update.emit(30, "Searching database")
+
+        import numpy as np
+        import time
+        print('num keypoints:', len(keypoints))
+        print('descriptor shape:', descriptors.shape)
+        print('Searching...')
+        self.progress_update.emit(100, "Done")
+
+        keys = list(self.database.keys())
+        scores = np.random.uniform(0.2, 0.98, size=10)
+        self.finished.emit(list(zip(keys, scores)))
 
 
 class LineFileChooser(w.QWidget):
