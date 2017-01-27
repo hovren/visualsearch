@@ -196,16 +196,12 @@ class DatabasePage(w.QWidget):
         save_geo_button = w.QPushButton("Save Locations")
         save_geo_button.clicked.connect(self.on_save_locations)
 
-        clear_button = w.QPushButton("Clear selection")
-        clear_button.clicked.connect(lambda: self.image_list.setCurrentItem(None))
-
         clear_location_button = w.QPushButton("Clear location")
         clear_location_button.clicked.connect(self.clear_location_clicked)
 
         use_as_query_button = w.QPushButton("Use as Query")
 
         button_box = w.QHBoxLayout()
-        button_box.addWidget(clear_button)
         button_box.addWidget(clear_location_button)
         button_box.addWidget(use_as_query_button)
 
@@ -341,15 +337,12 @@ class QueryPage(w.QWidget):
         self.result_list.currentItemChanged.connect(self.on_item_changed)
         edit_query_button = w.QPushButton("Query")
         edit_query_button.clicked.connect(self.on_set_query)
-        clear_button = w.QPushButton("Clear selection")
-        clear_button.clicked.connect(lambda: self.result_list.setCurrentItem(None))
 
         vbox = w.QVBoxLayout()
         vbox.addWidget(edit_query_button)
         vbox.addWidget(self.query_image)
         vbox.addWidget(w.QLabel("Result list"))
         vbox.addWidget(self.result_list)
-        vbox.addWidget(clear_button)
 
         vbox.addWidget(self.preview_image)
         self.setLayout(vbox)
