@@ -16,18 +16,24 @@ from vsearch.utils import load_descriptors_and_keypoints, sift_file_for_image, f
 
 NORRKOPING = LatLng(58.58923, 16.18035)
 
-QUERY_TAB = 0
-DATABASE_TAB = 1
+QUERY_TAB = 1
+DATABASE_TAB = 0
 
 
 class GuiWrappedDatabase(DatabaseWithLocation):
-    def __init__(self, visualdb, map_widget, image_root, geofile_path):
-        super().__init__(visualdb)
-        self.image_root = image_root
-        self.geofile_path = geofile_path
-        self.map_widget = map_widget
+    def __init__(self):
+        super().__init__(None)
+        self.image_root = None
+        self.geofile_path = None
+        self.map_widget = None
         self._marker_id_to_key = {}
         self._key_to_marker_id = {}
+
+
+    def load_data(self, visualdb, image_root, geofile):
+        self.geofile_path = geofile
+        self.image_root = image_root
+        self.visualdb = visualdb
 
         self.load_geofile()
 
@@ -97,10 +103,10 @@ class GuiWrappedDatabase(DatabaseWithLocation):
 
 class MainWindow(w.QMainWindow):
     def __init__(self):
-        self.database = None
-
         super().__init__()
+        self.database = GuiWrappedDatabase()
         self.setup_ui()
+        self.database.map_widget = self.map_view
         self.show()
 
     def setup_ui(self):
@@ -120,48 +126,24 @@ class MainWindow(w.QMainWindow):
         self.tab_widget = tab_widget = w.QTabWidget()
         tab_widget.currentChanged.connect(self.tab_changed)
 
-        load_database_button = w.QPushButton("Load database")
-
-        def load_db():
-            dialog = LoadDatabaseDialog(self)
-            if dialog.exec_():
-                self.load_database(dialog.db_path, dialog.image_root, geofile_path=None)
-
-
-        load_database_button.clicked.connect(load_db)
-
-        save_geo_button = w.QPushButton("Save Locations")
-        save_geo_button.clicked.connect(self.on_save_locations)
-
         # Layout
         vbox1 = w.QVBoxLayout()
-        hbox = w.QHBoxLayout()
-        button_hbox = w.QHBoxLayout()
-        vbox2 = w.QVBoxLayout()
-        tab2_layout = w.QVBoxLayout()
 
         self.query_page = QueryPage(self.database)
         self.database_page = DatabasePage(self.database)
-        tab_widget.addTab(self.query_page, "Query")
         tab_widget.addTab(self.database_page, "Database")
+        tab_widget.addTab(self.query_page, "Query")
 
         splitter = w.QSplitter(self)
         splitter.addWidget(self.map_view)
         splitter.addWidget(tab_widget)
 
-        button_hbox.addWidget(load_database_button)
-        button_hbox.addWidget(save_geo_button)
-
-        vbox1.addLayout(button_hbox)
         vbox1.addWidget(splitter)
 
         dummy = w.QWidget()
         dummy.setLayout(vbox1)
 
         self.setCentralWidget(dummy)
-
-    def on_save_locations(self):
-        self.database.save_geofile()
 
     def marker_clicked(self, marker_id):
         print('clicked marker #{:d}'.format(marker_id))
@@ -183,9 +165,9 @@ class MainWindow(w.QMainWindow):
             self.query_page.on_map_click(lat, lng)
 
     def tab_changed(self, tabnr):
-        if tabnr == 0: # Query
+        if tabnr == QUERY_TAB: # Query
             self.enter_query_tab()
-        elif tabnr == 1: # Database
+        elif tabnr == DATABASE_TAB: # Database
             self.database_page.on_enter()
 
     def enter_query_tab(self):
@@ -193,6 +175,62 @@ class MainWindow(w.QMainWindow):
         self.map_view.remove_all_markers()
         self.database_page.image_list.setCurrentItem(None)
 
+
+class DatabasePage(w.QWidget):
+    def __init__(self, database, parent=None):
+        super().__init__(parent=parent)
+        self.database = database
+        self._icon = QIcon.fromTheme("applications-internet")
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.image = ImageWidget()
+        self.image.setMinimumSize(QSize(256, 256))
+        self.image_list = w.QListWidget()
+        self.image_list.setIconSize(QSize(16, 16))
+        self.image_list.currentItemChanged.connect(self.on_item_changed)
+
+        self.load_database_button = w.QPushButton("Load database")
+        self.load_database_button.clicked.connect(self.on_load_database)
+
+        save_geo_button = w.QPushButton("Save Locations")
+        save_geo_button.clicked.connect(self.on_save_locations)
+
+        clear_button = w.QPushButton("Clear selection")
+        clear_button.clicked.connect(lambda: self.image_list.setCurrentItem(None))
+
+        clear_location_button = w.QPushButton("Clear location")
+        clear_location_button.clicked.connect(self.clear_location_clicked)
+
+        use_as_query_button = w.QPushButton("Use as Query")
+
+        button_box = w.QHBoxLayout()
+        button_box.addWidget(clear_button)
+        button_box.addWidget(clear_location_button)
+        button_box.addWidget(use_as_query_button)
+
+        vbox = w.QVBoxLayout()
+        vbox.addWidget(self.load_database_button)
+        vbox.addWidget(self.image_list)
+        vbox.addLayout(button_box)
+        vbox.addWidget(self.image)
+        vbox.addWidget(save_geo_button)
+        self.setLayout(vbox)
+
+    def on_enter(self):
+        if not self.database:
+            return
+        self.database.remove_all_markers()
+        self.database.add_all_markers()
+
+    def on_marker_moved(self, marker_id, latlng):
+        key = self.database.key_for_marker(marker_id)
+        self.database.update_location(key, latlng)
+
+    def on_load_database(self):
+        dialog = LoadDatabaseDialog(self)
+        if dialog.exec_():
+            self.load_database(dialog.db_path, dialog.image_root, geofile_path=None)
 
     def load_database(self, path, image_root, geofile_path=None):
         visual_database = AnnDatabase.from_file(path)
@@ -207,63 +245,20 @@ class MainWindow(w.QMainWindow):
         if not geofile_path:
             geofile_path = os.path.join(image_root, 'geo.csv')
 
-        self.database = GuiWrappedDatabase(visual_database, self.map_view, image_root, geofile_path)
-        self.database_page.load_database(self.database)
-        self.query_page.database = self.database
-        self.tab_widget.setCurrentIndex(DATABASE_TAB)
+        self.database.load_data(visual_database, image_root, geofile_path)
 
-
-class DatabasePage(w.QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent=parent)
-        self.database = None
-        self._icon = QIcon.fromTheme("applications-internet")
-        self.setup_ui()
-
-    def load_database(self, database):
-        self.database = database
-        for key, entry in database.items():
+        for key, entry in self.database.items():
             item = w.QListWidgetItem(key)
             if entry.latlng:
                 item.setIcon(self._icon)
             self.image_list.addItem(item)
 
         self.image_list.sortItems()
+        self.load_database_button.setDisabled(True)
+        self.on_enter() # Draw markers on map
 
-    def setup_ui(self):
-        self.image = ImageWidget()
-        self.image.setMinimumSize(QSize(256, 256))
-        self.image_list = w.QListWidget()
-        self.image_list.setIconSize(QSize(16, 16))
-        self.image_list.currentItemChanged.connect(self.on_item_changed)
-
-        clear_button = w.QPushButton("Clear selection")
-        clear_button.clicked.connect(lambda: self.image_list.setCurrentItem(None))
-
-        clear_location_button = w.QPushButton("Clear location")
-        clear_location_button.clicked.connect(self.clear_location_clicked)
-
-        button_box = w.QHBoxLayout()
-        button_box.addWidget(clear_button)
-        button_box.addWidget(clear_location_button)
-
-
-        vbox = w.QVBoxLayout()
-        vbox.addWidget(self.image_list)
-        #vbox.addWidget(clear_button)
-        vbox.addLayout(button_box)
-        vbox.addWidget(self.image)
-        self.setLayout(vbox)
-
-    def on_enter(self):
-        if not self.database:
-            return
-        self.database.remove_all_markers()
-        self.database.add_all_markers()
-
-    def on_marker_moved(self, marker_id, latlng):
-        key = self.database.key_for_marker(marker_id)
-        self.database.update_location(key, latlng)
+    def on_save_locations(self):
+        self.database.save_geofile()
 
     def clear_location_clicked(self):
         item = self.image_list.currentItem()
@@ -461,10 +456,17 @@ class QueryImageDialog(w.QDialog):
         self.setLayout(vbox)
 
     def on_open(self):
-        self.image_path, *_ = w.QFileDialog.getOpenFileName()
-        image = cv2.imread(self.image_path)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        self.image.set_array(image)
+        path, *_ = w.QFileDialog.getOpenFileName()
+        if not path:
+            return
+
+        self.image_path = path
+        try:
+            image = cv2.imread(self.image_path)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            self.image.set_array(image)
+        except (OSError, cv2.error):
+            w.QErrorMessage(self).showMessage("Failed to open image file")
 
     def accept(self):
         try:
@@ -583,12 +585,12 @@ if __name__ == "__main__":
     mwin = MainWindow()
 
     def on_load():
-        mwin.load_database('/home/hannes/Projects/VS-imsearch/db_sift_2k.h5', '/home/hannes/Datasets/narrative2')
+        mwin.database_page.load_database('/home/hannes/Projects/VS-imsearch/db_sift_2k.h5', '/home/hannes/Datasets/narrative2')
 
     from PyQt5.QtCore import QTimer
     timer = QTimer(mwin)
     timer.setSingleShot(True)
     timer.timeout.connect(on_load)
-    timer.start(2000)
+    #timer.start(2000)
 
     sys.exit(app.exec_())

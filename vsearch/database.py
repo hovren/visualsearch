@@ -132,7 +132,7 @@ class DatabaseWithLocation(collections.abc.MutableMapping):
         return iter(self.visualdb.image_vectors)
 
     def __len__(self):
-        return len(self.visualdb)
+        return len(self.visualdb) if self.visualdb is not None else 0
 
     def __setitem__(self, key, value):
         if not isinstance(value, DatabaseEntry):
