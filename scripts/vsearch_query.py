@@ -277,8 +277,10 @@ class DatabasePage(w.QWidget):
         if item:
             key = item.text()
             try:
+                # If there is a marker then clear selection (unselect current)
                 marker = self.database.marker_for_key(key)
-            except KeyError:
+                self.image_list.setCurrentItem(None)
+            except KeyError: # No marker on map
                 self.database.update_location(key, LatLng(lat, lng))
                 marker = self.database.add_marker_for_key(key)
                 item.setIcon(self._icon)
