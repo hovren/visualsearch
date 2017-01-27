@@ -150,6 +150,7 @@ class MainWindow(w.QMainWindow):
         self.database_page = DatabasePage(self.database)
         tab_widget.addTab(self.database_page, "Database")
         tab_widget.addTab(self.query_page, "Query")
+        self.database_page.query_by_key.connect(self.on_query_by_key)
 
         splitter = w.QSplitter(self)
         splitter.addWidget(self.map_view)
@@ -161,6 +162,10 @@ class MainWindow(w.QMainWindow):
         dummy.setLayout(vbox1)
 
         self.setCentralWidget(dummy)
+
+    def on_query_by_key(self, key):
+        self.tab_widget.setCurrentIndex(QUERY_TAB)
+        self.query_page.query_by_key(key)
 
     def marker_clicked(self, marker_id):
         print('clicked marker #{:d}'.format(marker_id))
@@ -194,6 +199,8 @@ class MainWindow(w.QMainWindow):
 
 
 class DatabasePage(w.QWidget):
+    query_by_key = pyqtSignal(str)
+
     def __init__(self, database, parent=None):
         super().__init__(parent=parent)
         self.database = database
@@ -221,6 +228,7 @@ class DatabasePage(w.QWidget):
         clear_location_button.clicked.connect(self.clear_location_clicked)
 
         use_as_query_button = w.QPushButton("Use as Query")
+        use_as_query_button.clicked.connect(lambda: self.query_by_key.emit(self.image_list.currentItem().text()))
 
         button_box = w.QHBoxLayout()
         button_box.addWidget(clear_location_button)
@@ -387,6 +395,13 @@ class QueryPage(w.QWidget):
             except KeyError:
                 pass
 
+    def query_by_key(self, key):
+        entry = self.database[key]
+        path = os.path.join(self.database.image_root, entry.key)
+        self.query_dialog.image_path = path
+        self.query_dialog.load_image_from_path()
+        return self.on_set_query()
+
     def on_set_query(self):
         if self.query_dialog.exec_():
             self.result_list.clear()
@@ -478,6 +493,9 @@ class QueryImageDialog(w.QDialog):
             return
 
         self.image_path = path
+        self.load_image_from_path()
+
+    def load_image_from_path(self):
         try:
             image = cv2.imread(self.image_path)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -608,6 +626,6 @@ if __name__ == "__main__":
     timer = QTimer(mwin)
     timer.setSingleShot(True)
     timer.timeout.connect(on_load)
-    #timer.start(2000)
+    timer.start(2000)
 
     sys.exit(app.exec_())
