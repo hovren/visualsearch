@@ -188,14 +188,9 @@ class MainWindow(w.QMainWindow):
 
     def tab_changed(self, tabnr):
         if tabnr == QUERY_TAB: # Query
-            self.enter_query_tab()
+            self.query_page.on_enter()
         elif tabnr == DATABASE_TAB: # Database
             self.database_page.on_enter()
-
-    def enter_query_tab(self):
-        print('Query tab')
-        self.map_view.remove_all_markers()
-        self.database_page.image_list.setCurrentItem(None)
 
 
 class DatabasePage(w.QWidget):
@@ -376,6 +371,10 @@ class QueryPage(w.QWidget):
 
         vbox.addWidget(self.preview_image)
         self.setLayout(vbox)
+
+    def on_enter(self):
+        self.database.remove_all_markers()
+        self.add_markers_for_matches()
 
     def on_item_changed(self, current, prev):
         self.database.remove_all_markers()
