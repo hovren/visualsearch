@@ -5,7 +5,7 @@ import collections
 import numpy as np
 import cv2
 import PyQt5.QtWidgets as w
-from PyQt5.QtCore import QFileInfo, QUrl, QSize, QThread, pyqtSignal
+from PyQt5.QtCore import QFileInfo, QUrl, QSize, QThread, pyqtSignal, QObject
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
 
@@ -21,11 +21,17 @@ DATABASE_TAB = 0
 
 
 class GuiWrappedDatabase(DatabaseWithLocation):
+
+    class Signals(QObject):
+        locations_changed = pyqtSignal()
+        locations_saved = pyqtSignal()
+
     def __init__(self):
         super().__init__(None)
         self.image_root = None
         self.geofile_path = None
         self.map_widget = None
+        self.signals = GuiWrappedDatabase.Signals()
         self._marker_id_to_key = {}
         self._key_to_marker_id = {}
 
@@ -53,6 +59,7 @@ class GuiWrappedDatabase(DatabaseWithLocation):
                 latlng = LatLng(float(lat), float(lng))
                 print(key, latlng)
                 self.update_location(key, latlng)
+        self.signals.locations_saved.emit() # Database and disk file agree = "status: saved"
 
     def save_geofile(self):
         if not self.geofile_path:
@@ -62,11 +69,20 @@ class GuiWrappedDatabase(DatabaseWithLocation):
             for entry in self.values():
                 if entry.latlng:
                     f.write('{:s}, {:f}, {:f}\n'.format(entry.key, entry.latlng.lat, entry.latlng.lng))
+        self.signals.locations_saved.emit()
 
     def remove_all_markers(self):
         self.map_widget.remove_all_markers()
         self._marker_id_to_key.clear()
         self._key_to_marker_id.clear()
+
+    def remove_marker(self, marker_id):
+        marker = self.map_widget.markers[marker_id]
+        marker.remove()
+        key = self._marker_id_to_key[marker_id]
+        del self._marker_id_to_key[marker_id]
+        del self._key_to_marker_id[key]
+
 
     def add_marker_for_key(self, key):
         if key not in self._key_to_marker_id:
@@ -99,6 +115,7 @@ class GuiWrappedDatabase(DatabaseWithLocation):
         old = self[key]
         new = DatabaseEntry(old.key, old.bow, latlng)
         self[key] = new
+        self.signals.locations_changed.emit()
 
 
 class MainWindow(w.QMainWindow):
@@ -180,7 +197,8 @@ class DatabasePage(w.QWidget):
     def __init__(self, database, parent=None):
         super().__init__(parent=parent)
         self.database = database
-        self._icon = QIcon.fromTheme("applications-internet")
+        self._has_location_icon = QIcon.fromTheme("applications-internet")
+        self._no_location_icon = QIcon()
         self.setup_ui()
 
     def setup_ui(self):
@@ -193,8 +211,11 @@ class DatabasePage(w.QWidget):
         self.load_database_button = w.QPushButton("Load database")
         self.load_database_button.clicked.connect(self.on_load_database)
 
-        save_geo_button = w.QPushButton("Save Locations")
-        save_geo_button.clicked.connect(self.on_save_locations)
+        self.save_geo_button = w.QPushButton("Save Locations")
+        self.save_geo_button.clicked.connect(self.on_save_locations)
+        self.save_geo_button.setDisabled(True)
+        self.database.signals.locations_changed.connect(lambda: self.save_geo_button.setEnabled(True))
+        self.database.signals.locations_saved.connect(lambda: self.save_geo_button.setEnabled(False))
 
         clear_location_button = w.QPushButton("Clear location")
         clear_location_button.clicked.connect(self.clear_location_clicked)
@@ -210,7 +231,7 @@ class DatabasePage(w.QWidget):
         vbox.addWidget(self.image_list)
         vbox.addLayout(button_box)
         vbox.addWidget(self.image)
-        vbox.addWidget(save_geo_button)
+        vbox.addWidget(self.save_geo_button)
         self.setLayout(vbox)
 
     def on_enter(self):
@@ -245,8 +266,8 @@ class DatabasePage(w.QWidget):
 
         for key, entry in self.database.items():
             item = w.QListWidgetItem(key)
-            if entry.latlng:
-                item.setIcon(self._icon)
+            icon = self._has_location_icon if entry.latlng else self._no_location_icon
+            item.setIcon(icon)
             self.image_list.addItem(item)
 
         self.image_list.sortItems()
@@ -263,7 +284,8 @@ class DatabasePage(w.QWidget):
             try:
                 marker = self.database.marker_for_key(key)
                 self.database.update_location(key, None)
-                marker.remove()
+                self.database.remove_marker(marker.id)
+                item.setIcon(self._no_location_icon)
             except KeyError:
                 pass # No marker
 
@@ -279,7 +301,7 @@ class DatabasePage(w.QWidget):
             except KeyError: # No marker on map
                 self.database.update_location(key, LatLng(lat, lng))
                 marker = self.database.add_marker_for_key(key)
-                item.setIcon(self._icon)
+                item.setIcon(self._has_location_icon)
                 marker.setDraggable(True)
 
     def select_by_marker(self, marker_id):
