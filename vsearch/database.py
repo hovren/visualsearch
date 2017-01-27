@@ -7,7 +7,11 @@ import numpy as np
 import h5py
 import annoy
 
-from .utils import sift_file_for_image, calculate_sift, filter_roi, load_descriptors_and_keypoints
+from vsearch.colornames import calculate_colornames
+from .utils import filter_roi, load_descriptors_and_keypoints
+from .sift import calculate_sift, sift_file_for_image
+from .colornames import calculate_colornames, cname_file_for_image
+from vsearch.sift import sift_file_for_image, calculate_sift
 
 
 def cos_distance(x, y):
@@ -23,7 +27,7 @@ DatabaseEntry = collections.namedtuple('DatabaseEntry', ['key', 'bow', 'latlng']
 SUBCLASS_MESSAGE = "Please use one of the subclasses"
 
 
-class QueryableDatabase:
+class QueryableDatabase(collections.abc.Mapping):
     def query_image(self, image, roi):
         raise NotImplementedError
 
@@ -31,7 +35,7 @@ class QueryableDatabase:
         raise NotImplementedError
 
 
-class BagOfWordsDatabase:
+class BagOfWordsDatabase(collections.abc.MutableMapping):
     def __init__(self, vocabulary):
         self.image_vectors = {}
         self.idf = None
@@ -66,6 +70,21 @@ class BagOfWordsDatabase:
 
     def __len__(self):
         return len(self.image_vectors)
+
+    def __delitem__(self, key):
+        del self.image_vectors[key]
+
+    def __getitem__(self, key):
+        return self.image_vectors[key]
+
+    def __iter__(self):
+        return iter(self.image_vectors)
+
+    def __setitem__(self, key, value):
+        if key in self:
+            raise DatabaseError("Illegal to change BOW vectors after insertion!")
+        else:
+            self.add_image(key, value)
 
     def query_descriptors(self, descriptors):
         q_tf = self.bag(descriptors)
@@ -144,33 +163,66 @@ class SiftFeatureDatabase(QueryableDatabase, AnnDatabase):
             return self.query_image(image, roi)
 
 
+class ColornamesFeatureDatabase(QueryableDatabase, AnnDatabase):
+    def query_image(self, image, roi):
+        descriptors, keypoints = calculate_colornames(image, roi)
+        return self.query_descriptors(descriptors)
+
+    def query_path(self, path, roi):
+        cname_file = cname_file_for_image(path)
+        if os.path.exists(cname_file):
+            print('Loading Colorname features from', cname_file)
+            descriptors, keypoints = load_descriptors_and_keypoints(cname_file)
+            descriptors, keypoints = filter_roi(descriptors, keypoints, roi)
+            return self.query_descriptors(descriptors)
+        else:
+            image = cv2.imread(path)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            return self.query_image(image, roi)
+
+
 class SiftColornamesWrapper(QueryableDatabase):
     def __init__(self, sift_db, cname_db):
         self.sift_db = sift_db
         self.cname_db = cname_db
+        if not self.sift_db.image_vectors.keys() == self.cname_db.image_vectors.keys():
+            raise DatabaseError("SIFT and Colornames databases had different keys!")
 
     @classmethod
     def from_files(cls, sift_db_path, cname_db_path):
-        sift_db = AnnDatabase.from_file(sift_db_path)
-        cname_db = AnnDatabase.from_file(cname_db_path)
+        sift_db = SiftFeatureDatabase.from_file(sift_db_path)
+        cname_db = ColornamesFeatureDatabase.from_file(cname_db_path)
         instance = cls(sift_db, cname_db)
         return instance
 
-    def query_descriptors(self, sift_descriptors, cname_descriptors):
-        sift_matches = dict(self.sift_db.query_descriptors(sift_descriptors))
-        cname_matches = dict(self.cname_db.query_descriptors(cname_descriptors))
+    def query_path(self, path, roi):
+        sift_matches = dict(self.sift_db.query_path(path, roi))
+        cname_matches = dict(self.cname_db.query_path(path, roi))
+        return self.combine_matches(sift_matches, cname_matches)
+
+    def query_image(self, image, roi):
+        sift_matches = dict(self.sift_db.query_image(image, roi))
+        cname_matches = dict(self.cname_db.query_image(image, roi))
+        return self.combine_matches(sift_matches, cname_matches)
+
+    def combine_matches(self, sift_matches, cname_matches):
+        sift_matches = dict(sift_matches)
+        cname_matches = dict(cname_matches)
         matches = [(key, min(sift_matches[key], cname_matches[key])) for key in sift_matches]
         matches.sort(key=lambda x: x[1])
         return matches
 
-    def query_image(self, image, roi):
-        pass
+    def __getitem__(self, key):
+        return self.sift_db[key], self.cname_db[key]
 
-    def query_path(self, path, roi):
-        pass
+    def __iter__(self):
+        return iter(self.sift_db)
+
+    def __len__(self):
+        return len(self.sift_db)
 
 
-class DatabaseWithLocation(collections.abc.MutableMapping, QueryableDatabase):
+class DatabaseWithLocation(QueryableDatabase):
     def __init__(self, visualdb):
         super().__init__()
         self.visualdb = visualdb
@@ -181,20 +233,17 @@ class DatabaseWithLocation(collections.abc.MutableMapping, QueryableDatabase):
         del self.locations[key]
 
     def __getitem__(self, key):
-        e = DatabaseEntry(key, self.visualdb.image_vectors[key], self.locations[key])
+        e = DatabaseEntry(key, self.visualdb[key], self.locations[key])
         return e
 
     def __iter__(self):
-        return iter(self.visualdb.image_vectors)
+        return iter(self.visualdb)
 
     def __len__(self):
         return len(self.visualdb) if self.visualdb is not None else 0
 
-    def __setitem__(self, key, value):
-        if not isinstance(value, DatabaseEntry):
-            raise ValueError("Value is not an Entry")
-        self.visualdb.image_vectors[key] = value.bow
-        self.locations[key] = value.latlng
+    def __setitem__(self, key, latlng):
+        self.locations[key] = latlng
 
     def query_image(self, image, roi):
         visual_matches = self.visualdb.query_image(image, roi)

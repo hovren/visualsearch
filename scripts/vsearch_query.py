@@ -12,7 +12,6 @@ from PyQt5.QtGui import QIcon
 from vsearch import AnnDatabase, DatabaseError
 from vsearch.database import LatLng, DatabaseEntry, DatabaseWithLocation, SiftColornamesWrapper, SiftFeatureDatabase
 from vsearch.gui import ImageWidget, ImageWithROI, LeafletWidget, LeafletMarker
-from vsearch.utils import load_descriptors_and_keypoints, sift_file_for_image, filter_roi, calculate_sift
 
 NORRKOPING = LatLng(58.58923, 16.18035)
 
@@ -111,9 +110,7 @@ class GuiWrappedDatabase(DatabaseWithLocation):
         return self.map_widget.markers[mid]
 
     def update_location(self, key, latlng):
-        old = self[key]
-        new = DatabaseEntry(old.key, old.bow, latlng)
-        self[key] = new
+        self[key] = latlng
         self.signals.locations_changed.emit()
 
 
@@ -252,10 +249,10 @@ class DatabasePage(w.QWidget):
             self.load_database(dialog.db_path, dialog.image_root, geofile_path=None)
 
     def load_database(self, sift_path, cname_path, image_root, geofile_path=None):
-        #visual_database = SiftColornamesWrapper.from_files(sift_path, cname_path)
-        visual_database = SiftFeatureDatabase.from_file(sift_path)
+        visual_database = SiftColornamesWrapper.from_files(sift_path, cname_path)
+        #visual_database = SiftFeatureDatabase.from_file(sift_path)
 
-        for key in visual_database.image_vectors:
+        for key in visual_database:
             path = os.path.join(image_root, key)
             if not os.path.exists(path):
                 msg = "Database file/key '{}' not found in image directory '{}'. Please try again.".format(key, image_root)
@@ -598,7 +595,9 @@ if __name__ == "__main__":
     mwin = MainWindow()
 
     def on_load():
-        mwin.database_page.load_database('/home/hannes/Projects/VS-imsearch/db_sift_2k.h5', None, '/home/hannes/Datasets/narrative2')
+        mwin.database_page.load_database('/home/hannes/Projects/VS-imsearch/db_sift_2k.h5',
+                                         '/home/hannes/Projects/VS-imsearch/db_cname_500.h5',
+                                         '/home/hannes/Datasets/narrative2')
 
     from PyQt5.QtCore import QTimer
     timer = QTimer(mwin)
