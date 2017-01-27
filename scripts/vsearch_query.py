@@ -10,7 +10,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
 
 from vsearch import AnnDatabase, DatabaseError
-from vsearch.database import LatLng, DatabaseEntry, DatabaseWithLocation
+from vsearch.database import LatLng, DatabaseEntry, DatabaseWithLocation, SiftColornamesWrapper, SiftFeatureDatabase
 from vsearch.gui import ImageWidget, ImageWithROI, LeafletWidget, LeafletMarker
 from vsearch.utils import load_descriptors_and_keypoints, sift_file_for_image, filter_roi, calculate_sift
 
@@ -82,7 +82,6 @@ class GuiWrappedDatabase(DatabaseWithLocation):
         key = self._marker_id_to_key[marker_id]
         del self._marker_id_to_key[marker_id]
         del self._key_to_marker_id[key]
-
 
     def add_marker_for_key(self, key):
         if key not in self._key_to_marker_id:
@@ -252,8 +251,9 @@ class DatabasePage(w.QWidget):
         if dialog.exec_():
             self.load_database(dialog.db_path, dialog.image_root, geofile_path=None)
 
-    def load_database(self, path, image_root, geofile_path=None):
-        visual_database = AnnDatabase.from_file(path)
+    def load_database(self, sift_path, cname_path, image_root, geofile_path=None):
+        #visual_database = SiftColornamesWrapper.from_files(sift_path, cname_path)
+        visual_database = SiftFeatureDatabase.from_file(sift_path)
 
         for key in visual_database.image_vectors:
             path = os.path.join(image_root, key)
@@ -411,18 +411,17 @@ class QueryPage(w.QWidget):
             patch = np.copy(image[y:y+height, x:x+width])
             self.query_image.set_array(patch)
 
-            self._search_thread = SearchThread(self.database, image, roi, image_path)
+            self._search_thread = SearchThread(self.database, image_path, roi)
 
-            progress = w.QProgressDialog("Loading SIFT features", "Abort", 0, 100, parent=self)
+            progress = w.QProgressDialog("Searching database", "Abort", 0, 100, parent=self)
             progress.setModal(True)
+            progress.setRange(0, 0)
 
-            def progress_cb(percentage, status):
-                print("[{:d}%] {}".format(percentage, status))
-                progress.setValue(percentage)
-                progress.setLabelText(status)
-            self._search_thread.progress_update.connect(progress_cb)
+            def finished(matches):
+                progress.destroy()
+                self.on_search_done(matches)
 
-            self._search_thread.finished.connect(self.on_search_done)
+            self._search_thread.finished.connect(finished)
 
             progress.show()
             self._search_thread.start()
@@ -521,35 +520,15 @@ class SearchThread(QThread):
     finished = pyqtSignal(list)
     progress_update = pyqtSignal(int, str) # Percentage, text
 
-    def __init__(self, database, image, roi, image_path, parent=None):
+    def __init__(self, database, image_path, roi, parent=None):
         super().__init__(parent)
         self.database = database
-        self.image = image
         self.image_path = image_path
         self.roi = roi
 
     def run(self):
-        sift_file = sift_file_for_image(self.image_path)
-        if os.path.exists(sift_file):
-            print('Loading SIFT features from', sift_file)
-            self.progress_update.emit(10, "Loading SIFT features")
-            descriptors, keypoints = load_descriptors_and_keypoints(sift_file)
-            descriptors, keypoints = filter_roi(descriptors, keypoints, self.roi)
-        else:
-            print('Calculating SIFT features in patch')
-            self.progress_update.emit(10, "Calculating SIFT features")
-            descriptors, keypoints = calculate_sift(self.image, roi=self.roi)
-
-        print('num keypoints:', len(keypoints))
-        print('descriptor shape:', descriptors.shape)
-        print('Searching...')
-
-        self.progress_update.emit(30, "Searching database")
-
-        matches = self.database.query(descriptors)
+        matches = self.database.query_path(self.image_path, self.roi)
         max_matches = 10
-
-        self.progress_update.emit(100, "Finished")
         self.finished.emit(matches[:max_matches])
 
 
@@ -619,7 +598,7 @@ if __name__ == "__main__":
     mwin = MainWindow()
 
     def on_load():
-        mwin.database_page.load_database('/home/hannes/Projects/VS-imsearch/db_sift_2k.h5', '/home/hannes/Datasets/narrative2')
+        mwin.database_page.load_database('/home/hannes/Projects/VS-imsearch/db_sift_2k.h5', None, '/home/hannes/Datasets/narrative2')
 
     from PyQt5.QtCore import QTimer
     timer = QTimer(mwin)

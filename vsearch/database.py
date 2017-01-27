@@ -2,9 +2,12 @@ import collections
 import collections.abc
 import os
 
+import cv2
 import numpy as np
 import h5py
 import annoy
+
+from .utils import sift_file_for_image, calculate_sift, filter_roi, load_descriptors_and_keypoints
 
 
 def cos_distance(x, y):
@@ -19,7 +22,16 @@ DatabaseEntry = collections.namedtuple('DatabaseEntry', ['key', 'bow', 'latlng']
 
 SUBCLASS_MESSAGE = "Please use one of the subclasses"
 
-class BaseDatabase:
+
+class QueryableDatabase:
+    def query_image(self, image, roi):
+        raise NotImplementedError
+
+    def query_path(self, path, roi):
+        raise NotImplementedError
+
+
+class BagOfWordsDatabase:
     def __init__(self, vocabulary):
         self.image_vectors = {}
         self.idf = None
@@ -55,7 +67,7 @@ class BaseDatabase:
     def __len__(self):
         return len(self.image_vectors)
 
-    def query(self, descriptors):
+    def query_descriptors(self, descriptors):
         q_tf = self.bag(descriptors)
         q_tfidf = q_tf * self.idf
 
@@ -87,7 +99,7 @@ class BaseDatabase:
         return instance
 
 
-class AnnDatabase(BaseDatabase):
+class AnnDatabase(BagOfWordsDatabase):
     def __init__(self, vocabulary):
         self.annoy_index = None
         self.n_trees = 20
@@ -114,7 +126,51 @@ class AnnDatabase(BaseDatabase):
         return document_word_count
 
 
-class DatabaseWithLocation(collections.abc.MutableMapping):
+class SiftFeatureDatabase(QueryableDatabase, AnnDatabase):
+    def query_image(self, image, roi):
+        descriptors, keypoints = calculate_sift(image, roi)
+        return self.query_descriptors(descriptors)
+
+    def query_path(self, path, roi):
+        sift_file = sift_file_for_image(path)
+        if os.path.exists(sift_file):
+            print('Loading SIFT features from', sift_file)
+            descriptors, keypoints = load_descriptors_and_keypoints(sift_file)
+            descriptors, keypoints = filter_roi(descriptors, keypoints, roi)
+            return self.query_descriptors(descriptors)
+        else:
+            image = cv2.imread(path)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            return self.query_image(image, roi)
+
+
+class SiftColornamesWrapper(QueryableDatabase):
+    def __init__(self, sift_db, cname_db):
+        self.sift_db = sift_db
+        self.cname_db = cname_db
+
+    @classmethod
+    def from_files(cls, sift_db_path, cname_db_path):
+        sift_db = AnnDatabase.from_file(sift_db_path)
+        cname_db = AnnDatabase.from_file(cname_db_path)
+        instance = cls(sift_db, cname_db)
+        return instance
+
+    def query_descriptors(self, sift_descriptors, cname_descriptors):
+        sift_matches = dict(self.sift_db.query_descriptors(sift_descriptors))
+        cname_matches = dict(self.cname_db.query_descriptors(cname_descriptors))
+        matches = [(key, min(sift_matches[key], cname_matches[key])) for key in sift_matches]
+        matches.sort(key=lambda x: x[1])
+        return matches
+
+    def query_image(self, image, roi):
+        pass
+
+    def query_path(self, path, roi):
+        pass
+
+
+class DatabaseWithLocation(collections.abc.MutableMapping, QueryableDatabase):
     def __init__(self, visualdb):
         super().__init__()
         self.visualdb = visualdb
@@ -140,7 +196,12 @@ class DatabaseWithLocation(collections.abc.MutableMapping):
         self.visualdb.image_vectors[key] = value.bow
         self.locations[key] = value.latlng
 
-    def query(self, descriptors):
-        visual_matches = self.visualdb.query(descriptors)
+    def query_image(self, image, roi):
+        visual_matches = self.visualdb.query_image(image, roi)
+        matches = [(self[key], score) for key, score in visual_matches]
+        return matches
+
+    def query_path(self, path, roi):
+        visual_matches = self.visualdb.query_path(path, roi)
         matches = [(self[key], score) for key, score in visual_matches]
         return matches
