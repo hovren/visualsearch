@@ -13,6 +13,8 @@ FEATURE_TYPES = {
     'colornames': FeatureType('colornames', 'colornames', '.cname.h5', 11)
 }
 
+SUPPORTED_IMAGE_EXTENSIONS = ('.jpg', '.png')
+
 
 def load_descriptors_and_keypoints(path, *, descriptors=True, keypoints=True):
     with h5py.File(path, 'r') as f:
@@ -49,9 +51,8 @@ def save_keypoints_and_descriptors(path, kps, desc):
 
 
 def find_images(directory):
-    valid_extensions = ('.jpg', '.png')
     return [os.path.join(directory, f) for f in os.listdir(directory)
-            if os.path.splitext(f)[-1] in valid_extensions]
+            if os.path.splitext(f)[-1] in SUPPORTED_IMAGE_EXTENSIONS]
 
 
 def keypoint_inside_roi(kp, roi):
@@ -75,3 +76,27 @@ def save_vocabulary(means, path):
 def load_vocabulary(path):
     with h5py.File(path, 'r') as f:
         return f['vocabulary'].value
+
+
+def image_for_descriptor_file(desc_path):
+    try:
+        feat_type = [ft for ft in FEATURE_TYPES.values() if desc_path.endswith(ft.extension)][0]
+    except KeyError:
+        raise ValueError("{} does not match any known feature type extension".format(os.path.basename(desc_path)))
+
+    fname = os.path.basename(desc_path)
+    root = fname[:-len(feat_type.extension)]
+    directory = os.path.dirname(desc_path)
+
+    images = []
+    for ext in SUPPORTED_IMAGE_EXTENSIONS:
+        path = os.path.join(directory, root + ext)
+        if os.path.exists(path):
+            images.append(path)
+
+    if not images:
+        raise ValueError("No matching image found")
+    elif len(images) == 1:
+        return images[0]
+    else:
+        raise ValueError("Multiple matching files found")
