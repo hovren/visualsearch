@@ -448,7 +448,8 @@ class QueryPage(w.QWidget):
             patch = np.copy(image[y:y+height, x:x+width])
             self.query_image.set_array(patch)
 
-            self._search_thread = SearchThread(self.database, image_path, roi)
+            search_options = self.query_dialog.search_options
+            self._search_thread = SearchThread(self.database, image_path, roi, **search_options)
 
             progress = w.QProgressDialog("Searching database", "Abort", 0, 100, parent=self)
             progress.setModal(True)
@@ -494,7 +495,6 @@ class QueryPage(w.QWidget):
             self.result_list.setCurrentItem(item)
 
 
-
 class QueryImageDialog(w.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
@@ -510,6 +510,48 @@ class QueryImageDialog(w.QDialog):
 
         instructions = w.QLabel("Open an image and use the mouse to select a region of interest.")
 
+        gb = w.QGroupBox()
+        gb.setTitle("Search options")
+        gblayout = w.QFormLayout()
+        hbox = w.QHBoxLayout()
+        self.radios = {}
+        for i, radiokey in enumerate(("number", "distance", "both")):
+            radio = w.QRadioButton(radiokey)
+            hbox.addWidget(radio)
+            radio.toggled.connect(self.update_radio_state)
+            self.radios[radiokey] = radio
+        hbox.addStretch()
+
+        self.max_results = w.QSpinBox()
+        self.max_results.setRange(1, 100)
+        self.max_results.setValue(10)
+
+        max_score_label = w.QLabel()
+        self.max_score = w.QSlider()
+        self.max_score.setOrientation(Qt.Horizontal)
+        self.slider_resolution = 100
+        self.max_score.setRange(0, self.slider_resolution)
+
+        def on_slider_change(new_value):
+            score = self.get_slider_max_score()
+            max_score_label.setText("{:.03f}".format(score))
+
+        self.max_score.valueChanged.connect(on_slider_change)
+        self.max_score.setValue(0.75 * self.slider_resolution)
+
+        gblayout.addRow("Filter by", hbox)
+        res_hbox = w.QHBoxLayout()
+        res_hbox.addWidget(self.max_results)
+        res_hbox.addStretch(1)
+        gblayout.addRow("Max results", res_hbox)
+        dist_hbox = w.QHBoxLayout()
+        dist_hbox.addWidget(self.max_score)
+        dist_hbox.addWidget(max_score_label)
+        gblayout.addRow("Max distance", dist_hbox)
+        gb.setLayout(gblayout)
+
+
+
         bb = w.QDialogButtonBox(w.QDialogButtonBox.Ok | w.QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
@@ -518,9 +560,40 @@ class QueryImageDialog(w.QDialog):
         vbox.addWidget(instructions)
         vbox.addWidget(open_button)
         vbox.addWidget(self.image)
+        vbox.addWidget(gb)
         vbox.addWidget(bb)
 
         self.setLayout(vbox)
+
+        self.radios['number'].setChecked(True)
+        self.update_radio_state(True)
+
+    def update_radio_state(self, state):
+        if state:
+            which = [key for key, radio in self.radios.items() if radio.isChecked()][0]
+            for widget in [self.max_results, self.max_score]:
+                widget.setEnabled(False)
+
+            if which in ('number', 'both'):
+                self.max_results.setEnabled(True)
+            if which in ('distance', 'both'):
+                self.max_score.setEnabled(True)
+
+    def on_radio_select(self, state):#, state, which):
+        which = [key for key, radio in self.radios.items() if radio.isChecked()][0]
+        print('Toggle:', which, state)
+        widgets = {
+            'number': [self.max_results],
+            'score': [self.max_score],
+            'both': [self.max_results, self.max_score]
+        }[which]
+
+        for widget in widgets:
+            widget.setEnabled(state)
+
+
+    def get_slider_max_score(self):
+        return self.max_score.value() / self.slider_resolution
 
     def on_open(self):
         path, *_ = w.QFileDialog.getOpenFileName()
@@ -552,21 +625,40 @@ class QueryImageDialog(w.QDialog):
         print('All OK')
         return super().accept()
 
+    @property
+    def search_options(self):
+        options = { 'max_results': None, 'max_distance': None }
+        which = [key for key, radio in self.radios.items() if radio.isChecked()][0]
+        if which in ('distance', 'both'):
+            options['max_distance'] = self.get_slider_max_score()
+        if which in ('number', 'both'):
+            options['max_results'] = self.max_results.value()
+        return options
+
 
 class SearchThread(QThread):
     finished = pyqtSignal(list)
     progress_update = pyqtSignal(int, str) # Percentage, text
 
-    def __init__(self, database, image_path, roi, parent=None):
+    def __init__(self, database, image_path, roi, max_results=None, max_distance=None, parent=None):
         super().__init__(parent)
         self.database = database
         self.image_path = image_path
         self.roi = roi
+        self.max_distance = max_distance
+        self.max_results = max_results
 
     def run(self):
         matches = self.database.query_path(self.image_path, self.roi)
-        max_matches = 10
-        self.finished.emit(matches[:max_matches])
+
+        if self.max_distance:
+            matches = [m for m in matches if m[1] <= self.max_distance]
+
+        if self.max_results:
+            matches = matches[:self.max_results]
+
+        self.finished.emit(matches)
+
 
 
 class LineFileChooser(w.QWidget):
