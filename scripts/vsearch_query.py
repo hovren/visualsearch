@@ -1,17 +1,15 @@
 import sys
 import os
-import collections
 import argparse
 
 import numpy as np
 import cv2
 import PyQt5.QtWidgets as w
-from PyQt5.QtCore import QFileInfo, QUrl, QSize, QThread, pyqtSignal, QObject, QTimer
+from PyQt5.QtCore import QSize, QThread, pyqtSignal, QObject, QTimer
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
 
-from vsearch import AnnDatabase, DatabaseError
-from vsearch.database import LatLng, DatabaseEntry, DatabaseWithLocation, SiftColornamesWrapper, SiftFeatureDatabase
+from vsearch.database import LatLng, DatabaseWithLocation, SiftColornamesWrapper
 from vsearch.gui import ImageWidget, ImageWithROI, LeafletWidget, LeafletMarker
 
 NORRKOPING = LatLng(58.58923, 16.18035)
@@ -606,8 +604,6 @@ class LoadDatabaseDialog(w.QDialog):
         self._cname_db_path.setMinimumWidth(width)
         self._image_root = LineFileChooser(directory=True)
         self._sift_db_path.setMinimumWidth(width)
-        #self._geofile = LineFileChooser(filter='*.csv')
-        #self._geofile.setMinimumWidth(width)
 
         bb = w.QDialogButtonBox(w.QDialogButtonBox.Ok | w.QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
@@ -617,7 +613,6 @@ class LoadDatabaseDialog(w.QDialog):
         form.addRow("SIFT database", self._sift_db_path)
         form.addRow("Colornames database", self._cname_db_path)
         form.addRow("Image directory", self._image_root)
-        #form.addRow("Location file", self._geofile)
         form.addWidget(bb)
 
         self.setLayout(form)
@@ -633,10 +628,6 @@ class LoadDatabaseDialog(w.QDialog):
     @property
     def image_root(self):
         return self._image_root.line.text()
-
-    #@property
-    #def geofile(self):
-    #    return None
 
 
 if __name__ == "__main__":
