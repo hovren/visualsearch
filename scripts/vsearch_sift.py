@@ -7,7 +7,7 @@ import cv2
 import tqdm
 
 from vsearch.utils import save_keypoints_and_descriptors, find_images
-from vsearch.sift import sift_file_for_image
+from vsearch.sift import sift_file_for_image, calculate_sift
 
 
 def find_missing(directory):
@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     for path in tqdm.tqdm(missing):
         img = cv2.imread(path)
-        kps, desc = detector.detectAndCompute(img, None)
+        desc, kps = calculate_sift(img)
         outpath = sift_file_for_image(path)
         save_keypoints_and_descriptors(outpath, kps, desc)
 

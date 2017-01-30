@@ -12,13 +12,20 @@ def sift_file_for_image(path):
     return sift_file
 
 
-def calculate_sift(image, roi=None):
+def calculate_sift(image, roi=None, only_keypoints=False):
     detector = cv2.xfeatures2d.SIFT_create()
     if roi is None: # Entire image
-        kps, des = detector.detectAndCompute(image, None)
+        if only_keypoints:
+            kps = detector.detect(image)
+            des = None
+        else:
+            kps, des = detector.detectAndCompute(image, None)
     else:
         kps = detector.detect()
         _, kps = filter_roi([], kps, roi)
-        des = detector.compute(kps)
+        if not only_keypoints:
+            des = detector.compute(kps)
+        else:
+            des = None
 
     return des, kps
