@@ -1,28 +1,17 @@
 import argparse
-import glob
 import os
-import sys
-import time
 import multiprocessing
-import itertools
 
 import cv2
-import numpy as np
 import tqdm
-import h5py
-import scipy.io
 
-from vsearch.utils import load_descriptors_and_keypoints, image_for_descriptor_file, FEATURE_TYPES, find_images, save_keypoints_and_descriptors
+from vsearch.utils import load_descriptors_and_keypoints, FEATURE_TYPES, find_images, save_keypoints_and_descriptors
 from vsearch.colornames import cname_file_for_image, calculate_colornames
 from vsearch.sift import sift_file_for_image
 
 SIFT = FEATURE_TYPES['sift']
 CNAME = FEATURE_TYPES['colornames']
 
-
-def cname_file_for_sift_file(sift_file):
-    image_file = image_for_descriptor_file(sift_file)
-    return cname_file_for_image(image_file)
 
 def worker(image_path):
     cname_file = cname_file_for_image(image_path)
