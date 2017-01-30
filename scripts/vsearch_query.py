@@ -24,6 +24,7 @@ class GuiWrappedDatabase(DatabaseWithLocation):
     class Signals(QObject):
         locations_changed = pyqtSignal()
         locations_saved = pyqtSignal()
+        database_load_finished = pyqtSignal()
 
     def __init__(self):
         super().__init__(None)
@@ -249,30 +250,43 @@ class DatabasePage(w.QWidget):
             self.load_database(dialog.db_path, dialog.image_root, geofile_path=None)
 
     def load_database(self, sift_path, cname_path, image_root, geofile_path=None):
-        visual_database = SiftColornamesWrapper.from_files(sift_path, cname_path)
-        #visual_database = SiftFeatureDatabase.from_file(sift_path)
-
-        for key in visual_database:
-            path = os.path.join(image_root, key)
-            if not os.path.exists(path):
-                msg = "Database file/key '{}' not found in image directory '{}'. Please try again.".format(key, image_root)
-                w.QErrorMessage(self).showMessage(msg)
-                return
-
         if not geofile_path:
             geofile_path = os.path.join(image_root, 'geo.csv')
 
-        self.database.load_data(visual_database, image_root, geofile_path)
+        progress_info = """<table>
+        <tr><td><b>SIFT</b></td><td>{}</td></tr>
+        <tr><td><b>Colornames</b></td><td>{}</td></tr>
+        <tr><td><b>Location info</b></td><td>{}</td></tr>
+        <tr><td><b>Image root</b></td><td>{}</td></tr>
+        </table>""".format(sift_path, cname_path, geofile_path, image_root)
+        progress = w.QProgressDialog(progress_info, "Abort", 0, 0, parent=self)
+        progress.setModal(True)
+        progress.setCancelButton(None)
+        progress.setWindowTitle('Loading database')
+        progress.show()
 
-        for key, entry in self.database.items():
-            item = w.QListWidgetItem(key)
-            icon = self._has_location_icon if entry.latlng else self._no_location_icon
-            item.setIcon(icon)
-            self.image_list.addItem(item)
+        self._load_thread = LoadDatabaseThread(sift_path, cname_path, image_root, self.database, geofile_path)
 
-        self.image_list.sortItems()
-        self.load_database_button.setDisabled(True)
-        self.on_enter() # Draw markers on map
+        def on_finished():
+            for key, entry in self.database.items():
+                item = w.QListWidgetItem(key)
+                icon = self._has_location_icon if entry.latlng else self._no_location_icon
+                item.setIcon(icon)
+                self.image_list.addItem(item)
+            self.image_list.sortItems()
+            self.load_database_button.setDisabled(True)
+            self.on_enter() # Draw markers on map
+            progress.destroy()
+
+        def on_fail(message):
+            w.QErrorMessage(self).showMessage(message)
+            progress.destroy()
+
+        self._load_thread.finished.connect(on_finished)
+        self._load_thread.failed.connect(on_fail)
+
+        self._load_thread.start()
+
 
     def on_save_locations(self):
         self.database.save_geofile()
@@ -339,7 +353,31 @@ class DatabasePage(w.QWidget):
             except KeyError:
                 pass
 
+class LoadDatabaseThread(QThread):
+    failed = pyqtSignal(str)
+    finished = pyqtSignal()
 
+    def __init__(self, sift_path, cname_path, image_root, database, geofile_path):
+        super().__init__()
+        self.database = database
+        self.sift_path = sift_path
+        self.cname_path = cname_path
+        self.image_root = image_root
+        self.geofile_path = geofile_path
+
+    def run(self):
+        visual_database = SiftColornamesWrapper.from_files(self.sift_path, self.cname_path)
+
+        for key in visual_database:
+            path = os.path.join(self.image_root, key)
+            if not os.path.exists(path):
+                msg = "Database file/key '{}' not found in image directory '{}'. Please try again.".format(key, self.image_root)
+                self.failed.emit(msg)
+                return
+
+        self.database.load_data(visual_database, self.image_root, self.geofile_path)
+
+        self.finished.emit()
 
 class QueryPage(w.QWidget):
     def __init__(self, database):
@@ -595,8 +633,8 @@ if __name__ == "__main__":
     mwin = MainWindow()
 
     def on_load():
-        mwin.database_page.load_database('/home/hannes/Projects/VS-imsearch/db_sift_2k.h5',
-                                         '/home/hannes/Projects/VS-imsearch/db_cname_500.h5',
+        mwin.database_page.load_database('/home/hannes/Projects/VS-imsearch/db_sift_10k.h5',
+                                         '/home/hannes/Projects/VS-imsearch/db_cname_15k.h5',
                                          '/home/hannes/Datasets/narrative2')
 
     from PyQt5.QtCore import QTimer
