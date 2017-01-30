@@ -119,8 +119,7 @@ class LocationDatabaseTests(unittest.TestCase):
         locdb = DatabaseWithLocation(self.visualdb)
         lat, lng = 58.0, 65.4
         for key, val in locdb.items():
-            new_entry = DatabaseEntry(key, val.bow, LatLng(lat, lng))
-            locdb[key] = new_entry
+            locdb[key] = LatLng(lat, lng)
 
         for key, val in locdb.items():
             self.assertEqual(val.latlng.lat, lat)
