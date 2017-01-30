@@ -247,7 +247,7 @@ class DatabasePage(w.QWidget):
     def on_load_database(self):
         dialog = LoadDatabaseDialog(self)
         if dialog.exec_():
-            self.load_database(dialog.db_path, dialog.image_root, geofile_path=None)
+            self.load_database(dialog.sift_db_path, dialog.cname_db_path, dialog.image_root, geofile_path=None)
 
     def load_database(self, sift_path, cname_path, image_root, geofile_path=None):
         if not geofile_path:
@@ -268,6 +268,7 @@ class DatabasePage(w.QWidget):
         self._load_thread = LoadDatabaseThread(sift_path, cname_path, image_root, self.database, geofile_path)
 
         def on_finished():
+            self.image_list.setDisabled(True) # Avoid selecting items as they are added
             for key, entry in self.database.items():
                 item = w.QListWidgetItem(key)
                 icon = self._has_location_icon if entry.latlng else self._no_location_icon
@@ -275,8 +276,10 @@ class DatabasePage(w.QWidget):
                 self.image_list.addItem(item)
             self.image_list.sortItems()
             self.load_database_button.setDisabled(True)
-            self.on_enter() # Draw markers on map
+            self.on_enter()  # Draw markers on map
             progress.destroy()
+            self.image_list.setEnabled(True)
+            self.image_list.setCurrentItem(None)
 
         def on_fail(message):
             w.QErrorMessage(self).showMessage(message)
@@ -595,11 +598,13 @@ class LoadDatabaseDialog(w.QDialog):
         super().__init__(parent=parent)
         self.setModal(True)
         self.setWindowTitle("Load database")
-        self._db_path = LineFileChooser(filter='*.h5')
-        width = 400
-        self._db_path.setMinimumWidth(width)
+        width = 600
+        self._sift_db_path = LineFileChooser(filter='*.h5')
+        self._sift_db_path.setMinimumWidth(width)
+        self._cname_db_path = LineFileChooser(filter='*.h5')
+        self._cname_db_path.setMinimumWidth(width)
         self._image_root = LineFileChooser(directory=True)
-        self._db_path.setMinimumWidth(width)
+        self._sift_db_path.setMinimumWidth(width)
         #self._geofile = LineFileChooser(filter='*.csv')
         #self._geofile.setMinimumWidth(width)
 
@@ -608,16 +613,21 @@ class LoadDatabaseDialog(w.QDialog):
         bb.rejected.connect(self.reject)
 
         form = w.QFormLayout()
-        form.addRow("Visual database", self._db_path)
-        form.addRow("Image root", self._image_root)
+        form.addRow("SIFT database", self._sift_db_path)
+        form.addRow("Colornames database", self._cname_db_path)
+        form.addRow("Image directory", self._image_root)
         #form.addRow("Location file", self._geofile)
         form.addWidget(bb)
 
         self.setLayout(form)
 
     @property
-    def db_path(self):
-        return self._db_path.line.text()
+    def sift_db_path(self):
+        return self._sift_db_path.line.text()
+
+    @property
+    def cname_db_path(self):
+        return self._sift_db_path.line.text()
 
     @property
     def image_root(self):
@@ -641,6 +651,6 @@ if __name__ == "__main__":
     timer = QTimer(mwin)
     timer.setSingleShot(True)
     timer.timeout.connect(on_load)
-    timer.start(2000)
+    #timer.start(2000)
 
     sys.exit(app.exec_())
