@@ -58,7 +58,6 @@ class GuiWrappedDatabase(DatabaseWithLocation):
                     pass
                 key = key.strip()
                 latlng = LatLng(float(lat), float(lng))
-                print(key, latlng)
                 self.update_location(key, latlng)
         self.signals.locations_saved.emit() # Database and disk file agree = "status: saved"
 
@@ -166,14 +165,12 @@ class MainWindow(w.QMainWindow):
         self.query_page.query_by_key(key)
 
     def marker_clicked(self, marker_id):
-        print('clicked marker #{:d}'.format(marker_id))
         if self.tab_widget.currentIndex() == DATABASE_TAB:
             self.database_page.select_by_marker(marker_id)
         elif self.tab_widget.currentIndex() == QUERY_TAB:
             self.query_page.select_by_marker(marker_id)
 
     def marker_moved(self, marker_id):
-        print('Moved marker', marker_id)
         if self.tab_widget.currentIndex() == DATABASE_TAB:
             m = self.map_view.markers[marker_id]
             self.database_page.on_marker_moved(marker_id, LatLng(*m.latlng))
@@ -324,7 +321,6 @@ class DatabasePage(w.QWidget):
 
     def select_by_marker(self, marker_id):
         key = self.database.key_for_marker(marker_id)
-        print('{:d} -> {:s}'.format(marker_id, key))
         return self.select_by_key(key)
 
     def select_by_key(self, key):
@@ -483,7 +479,6 @@ class QueryPage(w.QWidget):
 
     def select_by_marker(self, marker_id):
         key = self.database.key_for_marker(marker_id)
-        print('{:d} -> {:s}'.format(marker_id, key))
         return self.select_by_key(key)
 
     def select_by_key(self, key):
@@ -581,18 +576,6 @@ class QueryImageDialog(w.QDialog):
             if which in ('distance', 'both'):
                 self.max_score.setEnabled(True)
 
-    def on_radio_select(self, state):#, state, which):
-        which = [key for key, radio in self.radios.items() if radio.isChecked()][0]
-        print('Toggle:', which, state)
-        widgets = {
-            'number': [self.max_results],
-            'score': [self.max_score],
-            'both': [self.max_results, self.max_score]
-        }[which]
-
-        for widget in widgets:
-            widget.setEnabled(state)
-
 
     def get_slider_max_score(self):
         return self.max_score.value() / self.slider_resolution
@@ -624,7 +607,6 @@ class QueryImageDialog(w.QDialog):
             w.QErrorMessage(self).showMessage("No region of interest set!")
             return False
 
-        print('All OK')
         return super().accept()
 
     @property

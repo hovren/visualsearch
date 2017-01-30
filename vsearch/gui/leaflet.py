@@ -55,7 +55,6 @@ class LeafletMarker:
 
     @classmethod
     def add_to_map(cls, map_widget, latlng_list):
-        print('latlnglist', latlng_list)
         statements = ["var ids = [];"]
         for lat, lng in latlng_list:
             statements.append("var marker = " + cls.create_js(lat, lng) + ";")
@@ -132,11 +131,8 @@ class LeafletWidget(QWebView):
 
     def remove_all_markers(self):
         if self.markers:
-            print('Removing {:d} markers'.format(len(self.markers)))
             for m in self.markers.values():
                 m.remove(update=False)
 
             self.markers.clear()
             self.update()
-        else:
-            print('No markers to remove')
