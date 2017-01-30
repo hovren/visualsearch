@@ -695,7 +695,7 @@ class LoadDatabaseDialog(w.QDialog):
         self._cname_db_path = LineFileChooser(filter='*.h5')
         self._cname_db_path.setMinimumWidth(width)
         self._image_root = LineFileChooser(directory=True)
-        self._sift_db_path.setMinimumWidth(width)
+        self._image_root.setMinimumWidth(width)
 
         bb = w.QDialogButtonBox(w.QDialogButtonBox.Ok | w.QDialogButtonBox.Cancel)
         bb.accepted.connect(self.accept)
@@ -715,7 +715,7 @@ class LoadDatabaseDialog(w.QDialog):
 
     @property
     def cname_db_path(self):
-        return self._sift_db_path.line.text()
+        return self._cname_db_path.line.text()
 
     @property
     def image_root(self):
