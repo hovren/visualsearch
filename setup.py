@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup
 
 import os
 
@@ -7,7 +7,7 @@ scripts = [os.path.join('scripts', f) for f in os.listdir('./scripts/')]
 setup(
     name='vsearch',
     version='1.0',
-    packages=['vsearch'],
+    packages=['vsearch', 'vsearch.gui'],
     url='http://users.isy.liu.se/cvl/hanov56/',
     license='GPLv3',
     author='Hannes Ovrén',
