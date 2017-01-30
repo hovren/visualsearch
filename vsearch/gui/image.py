@@ -76,6 +76,12 @@ class ImageWithROI(ImageWidget):
         self.origin = None
         self.final = None
 
+    def set_array(self, array, preserve_roi=False):
+        super().set_array(array)
+        if self.rubberband and not preserve_roi:
+            self.rubberband.hide()
+            self.rubberband = None
+
     def mousePressEvent(self, event):
         origin = event.pos()
 
