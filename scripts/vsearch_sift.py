@@ -6,21 +6,12 @@ import os
 import cv2
 import tqdm
 
-from vsim_common import sift_file_for_image, save_keypoints_and_descriptors
+from vsearch.utils import save_keypoints_and_descriptors, find_images
+from vsearch.sift import sift_file_for_image
 
 
 def find_missing(directory):
-    def match(filename):
-        if filename.endswith('.jpg'):
-            #root = os.path.splitext(filename)[0]
-            #sift_file = os.path.join(directory, root + '.sift.h5') 
-            path = os.path.join(directory, filename)
-            sift_file = sift_file_for_image(path)
-            return not os.path.exists(sift_file)
-        else:
-            return False            
-        
-    return [os.path.join(directory, f) for f in os.listdir(directory) if match(f)]
+    return [path for path in find_images(directory) if not os.path.exists(sift_file_for_image(path))]
 
 
 if __name__ == "__main__":

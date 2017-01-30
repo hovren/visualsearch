@@ -2,12 +2,13 @@ import os
 
 import cv2
 
-from vsearch.utils import filter_roi
+from vsearch.utils import filter_roi, FEATURE_TYPES
 
+SIFT = FEATURE_TYPES['sift']
 
 def sift_file_for_image(path):
     root, _ = os.path.splitext(path)
-    sift_file = os.path.join(root + '.sift.h5')
+    sift_file = os.path.join(root + SIFT.extension)
     return sift_file
 
 

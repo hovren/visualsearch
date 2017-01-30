@@ -1,5 +1,17 @@
+import os
+import collections
+
 import cv2
 import h5py
+import numpy as np
+
+
+FeatureType = collections.namedtuple('FeatureType', 'key name extension featsize')
+
+FEATURE_TYPES = {
+    'sift': FeatureType('sift', 'SIFT', '.sift.h5', 128),
+    'colornames': FeatureType('colornames', 'colornames', '.cname.h5', 11)
+}
 
 
 def load_descriptors_and_keypoints(path, *, descriptors=True, keypoints=True):
@@ -25,6 +37,23 @@ def load_descriptors_and_keypoints(path, *, descriptors=True, keypoints=True):
     return descriptors, keypoint_list
 
 
+def save_keypoints_and_descriptors(path, kps, desc):
+    with h5py.File(path, 'w') as f:
+        f['descriptors'] = np.vstack(desc)
+        g = f.create_group('keypoints')
+        g['pt'] = np.vstack([kp.pt for kp in kps])
+        g['size'] = np.vstack([kp.size for kp in kps])
+        g['angle'] = np.vstack([kp.angle for kp in kps])
+        g['response'] = np.vstack([kp.response for kp in kps])
+        g['octave'] = np.vstack([kp.octave for kp in kps])
+
+
+def find_images(directory):
+    valid_extensions = ('.jpg', '.png')
+    return [os.path.join(directory, f) for f in os.listdir(directory)
+            if os.path.splitext(f)[-1] in valid_extensions]
+
+
 def keypoint_inside_roi(kp, roi):
     rx, ry, rw, rh = roi
     x, y = kp.pt
@@ -38,3 +67,11 @@ def filter_roi(des, kps, roi):
     return des, kps
 
 
+def save_vocabulary(means, path):
+    with h5py.File(path, 'w') as f:
+        f['vocabulary'] = means
+
+
+def load_vocabulary(path):
+    with h5py.File(path, 'r') as f:
+        return f['vocabulary'].value
