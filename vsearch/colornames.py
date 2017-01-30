@@ -1,17 +1,25 @@
 import os
 
 import numpy as np
+import scipy.io
+
+from .sift import calculate_sift
+from .utils import FEATURE_TYPES, filter_roi
+
+CNAMES = FEATURE_TYPES['colornames']
 
 COLOR_NAMES = ['black', 'blue', 'brown', 'grey', 'green', 'orange',
                'pink', 'purple', 'red', 'white', 'yellow']
 COLOR_RGB = [[0, 0, 0] , [0, 0, 1], [.5, .4, .25] , [.5, .5, .5] , [0, 1, 0] , [1, .8, 0] ,
              [1, .5, 1] ,[1, 0, 1], [1, 0, 0], [1, 1, 1 ] , [ 1, 1, 0 ]]
 
+COLORNAMES_TABLE_PATH = os.path.join(os.path.dirname(__file__), 'colornames_w2c.mat')
+COLORNAMES_TABLE = scipy.io.loadmat(COLORNAMES_TABLE_PATH)['w2c']
 
-def colornames_image(im, w2c, mode='index'):
+def colornames_image(im, mode='index'):
     im = im.astype('double')
     idx = np.floor(im[..., 0] / 8) + 32 * np.floor(im[..., 1] / 8) + 32 * 32 * np.floor(im[..., 2] / 8)
-    m = w2c[idx.astype('int')]
+    m = COLORNAMES_TABLE[idx.astype('int')]
 
     if mode == 'index':
         return np.argmax(m, 2)
@@ -20,10 +28,39 @@ def colornames_image(im, w2c, mode='index'):
     else:
         raise ValueError("No such mode: '{}'".format(mode))
 
+
 def cname_file_for_image(path):
     root, _ = os.path.splitext(path)
     cname_file = os.path.join(root + '.cname.h5')
     return cname_file
 
-def calculate_colornames(image, roi=None):
-    raise NotImplementedError("Nope, not done yet")
+
+def calculate_colornames(image, roi=None, keypoints=None):
+    if not keypoints:
+        _, keypoints = calculate_sift(image, only_keypoints=True)
+
+    _, keypoints = filter_roi([], keypoints, roi)
+
+    cname_des = np.zeros((len(keypoints), CNAMES.featsize), dtype='float32')
+    H, W = image.shape[:2]
+    for i, kp in enumerate(keypoints):
+        r = kp.size  # Mask/patch radius (note: kp.size is diameter, but we want twice the size anyway)
+        R = int(np.ceil(r))
+
+        # Cut out patch and extract colornames
+        x, y = np.round(np.array(kp.pt)).astype('int')
+        xmin = max(x - R, 0)
+        xmax = min(x + R, W - 1)
+        ymin = max(y - R, 0)
+        ymax = min(y + R, H - 1)
+        my, mx = np.mgrid[ymin:ymax + 1, xmin:xmax + 1]
+        patch = image[my, mx]
+        cname_patch = colornames_image(patch, mode='probability')
+
+        # Histogram (normalized) of colornames probabilities within circular radius
+        d = np.sqrt((x - mx) ** 2 + (y - my) ** 2)
+        mask = (d <= r)
+        probabilities = cname_patch[mask]
+        cname_des[i] = np.sum(probabilities, 0) / len(probabilities)
+
+    return cname_des, keypoints
