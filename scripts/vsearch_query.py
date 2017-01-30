@@ -1,11 +1,12 @@
 import sys
 import os
 import collections
+import argparse
 
 import numpy as np
 import cv2
 import PyQt5.QtWidgets as w
-from PyQt5.QtCore import QFileInfo, QUrl, QSize, QThread, pyqtSignal, QObject
+from PyQt5.QtCore import QFileInfo, QUrl, QSize, QThread, pyqtSignal, QObject, QTimer
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
 
@@ -639,18 +640,27 @@ class LoadDatabaseDialog(w.QDialog):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('sift', nargs='?')
+    parser.add_argument('cname', nargs='?')
+    parser.add_argument('directory', nargs='?')
+    args = parser.parse_args()
+
     app = w.QApplication(sys.argv)
     mwin = MainWindow()
 
-    def on_load():
-        mwin.database_page.load_database('/home/hannes/Projects/VS-imsearch/db_sift_10k.h5',
-                                         '/home/hannes/Projects/VS-imsearch/db_cname_15k.h5',
-                                         '/home/hannes/Datasets/narrative2')
+    # Load database from commandline?
+    if all([args.sift, args.cname, args.directory]):
+        def on_load():
+            mwin.database_page.load_database(args.sift, args.cname, args.directory)
 
-    from PyQt5.QtCore import QTimer
-    timer = QTimer(mwin)
-    timer.setSingleShot(True)
-    timer.timeout.connect(on_load)
-    #timer.start(2000)
+        timer = QTimer(mwin)
+        timer.setSingleShot(True)
+        timer.timeout.connect(on_load)
+        timer.start(2000)
+    elif any([args.sift, args.cname, args.directory]):
+        print('Must provide all arguments, or no arguments!')
+        sys.exit(-1)
 
+    # Start app
     sys.exit(app.exec_())
