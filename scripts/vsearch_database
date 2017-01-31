@@ -56,7 +56,7 @@ def worker(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.description = "Create Bag of Words database from all files in directory using a vocabulary"
+    parser.description = "Create a Bag of Words database from all files in directory using a vocabulary"
     parser.add_argument('directory')
     parser.add_argument('vocabulary')
     parser.add_argument('out')

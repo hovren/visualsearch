@@ -33,6 +33,7 @@ def worker(image_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.description = """Compute colornames descriptors for images in a directory"""
     parser.add_argument('dir')
     args = parser.parse_args()
 
