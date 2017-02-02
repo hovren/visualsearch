@@ -7,9 +7,7 @@ import numpy as np
 import h5py
 import annoy
 
-from vsearch.colornames import calculate_colornames
 from .utils import filter_roi, load_descriptors_and_keypoints
-from .sift import calculate_sift, sift_file_for_image
 from .colornames import calculate_colornames, cname_file_for_image
 from vsearch.sift import sift_file_for_image, calculate_sift
 
