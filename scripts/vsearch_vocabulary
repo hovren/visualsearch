@@ -16,12 +16,12 @@ from vsearch.utils import load_descriptors_and_keypoints, save_vocabulary, FEATU
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.description = "Create a vocabulary from image directory with computed features"
-    parser.add_argument('directory')
-    parser.add_argument('out')
-    parser.add_argument('size', type=int)
-    parser.add_argument('feature', choices=list(FEATURE_TYPES.keys()))
-    parser.add_argument('--iterations', type=int, default=15)
-    parser.add_argument('--tries', type=int, default=10)
+    parser.add_argument('directory', help='directory with images and feature files')
+    parser.add_argument('out', help='output file')
+    parser.add_argument('size', type=int, help='vocabulary size')
+    parser.add_argument('feature', choices=list(FEATURE_TYPES.keys()), help='type of feature')
+    parser.add_argument('--iterations', type=int, default=15, help='max number of kNN iterations')
+    parser.add_argument('--tries', type=int, default=10, help='number of times to run the kNN algorithm (best result is selected)')
     args = parser.parse_args()
     
     out_path = os.path.expanduser(args.out)

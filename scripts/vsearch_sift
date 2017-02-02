@@ -17,7 +17,7 @@ def find_missing(directory):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.description = """Compute SIFT descriptors for images in a directory"""
-    parser.add_argument('directory')
+    parser.add_argument('directory', )
     args = parser.parse_args()
     
     directory = os.path.expanduser(args.directory)

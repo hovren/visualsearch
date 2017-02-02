@@ -9,7 +9,6 @@ import sys
 from itertools import repeat
 
 import annoy
-import cv2
 import h5py
 import numpy as np
 import tqdm
@@ -57,12 +56,12 @@ def worker(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.description = "Create a Bag of Words database from all files in directory using a vocabulary"
-    parser.add_argument('directory')
-    parser.add_argument('vocabulary')
-    parser.add_argument('out')
-    parser.add_argument('feature', choices=list(FEATURE_TYPES.keys()))
+    parser.add_argument('directory', help='image directory')
+    parser.add_argument('vocabulary', help='Bag of Words vocabulary')
+    parser.add_argument('out', help='output file')
+    parser.add_argument('feature', choices=list(FEATURE_TYPES.keys()), help='type of feature')
     parser.add_argument('--overwrite', action='store_true')
-    parser.add_argument('--nproc', type=int)
+    parser.add_argument('--nproc', type=int, help='number of processes to use (default is number of CPU cores)')
     args = parser.parse_args()
     
     directory = os.path.expanduser(args.directory)

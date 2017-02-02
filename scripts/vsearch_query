@@ -711,9 +711,9 @@ class LoadDatabaseDialog(w.QDialog):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.description = "GUI for visual search using SIFT and colornames descriptors"
-    parser.add_argument('sift', nargs='?')
-    parser.add_argument('cname', nargs='?')
-    parser.add_argument('directory', nargs='?')
+    parser.add_argument('sift', nargs='?', help='SIFT database')
+    parser.add_argument('cname', nargs='?', help='Colornames database')
+    parser.add_argument('directory', nargs='?', help='Root image directory for above databases')
     args = parser.parse_args()
 
     app = w.QApplication(sys.argv)

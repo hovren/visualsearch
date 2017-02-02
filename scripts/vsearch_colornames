@@ -34,10 +34,10 @@ def worker(image_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.description = """Compute colornames descriptors for images in a directory"""
-    parser.add_argument('dir')
+    parser.add_argument('directory', help='directory with images')
     args = parser.parse_args()
 
-    directory = os.path.expanduser(args.dir)
+    directory = os.path.expanduser(args.directory)
     missing = []
     for f in find_images(directory):
         if not os.path.exists(cname_file_for_image(f)):
