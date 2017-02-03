@@ -13,6 +13,7 @@ from vsearch.sift import sift_file_for_image, calculate_sift
 
 
 def cos_distance(x, y):
+    "The cosine angle distance between two vectors of equal size"
     return 1 - np.dot(x / np.linalg.norm(x), y / np.linalg.norm(y))
 
 
@@ -26,21 +27,68 @@ SUBCLASS_MESSAGE = "Please use one of the subclasses"
 
 
 class QueryableDatabase(collections.abc.Mapping):
+    """Baseclass for a database that can be queried by an image"""
+
     def query_image(self, image, roi):
+        """Query using an image array and region of interest
+
+        Parameters
+        ---------------
+        image : np.ndarray
+            Image array
+        roi : array_like
+            Region of interest encoded as [x, y, width, height]
+
+        Returns
+        --------------
+        Sorted list of database matches [(key1, distance1), (key2, distance2), ...] where distance1 < distance2.
+        """
         raise NotImplementedError
 
     def query_path(self, path, roi):
+        """Query using an image path and region of interest
+
+        Parameters
+        ---------------
+        path : str
+            Path to the query image
+        roi : array_like
+            Region of interest encoded as [x, y, width, height]
+
+        Returns
+        --------------
+        Sorted list of database matches [(key1, distance1), (key2, distance2), ...] where distance1 < distance2.
+        """
         raise NotImplementedError
 
 
 class BagOfWordsDatabase(collections.abc.MutableMapping):
+    """Bag of Words (Bag of Features) database
+    """
     def __init__(self, vocabulary):
+        """Initialize the database
+
+        Parameters
+        -------------
+        vocabulary : array_like
+            The vocabulary, a KxD array with K words/prototypes of dimensionality D.
+        """
         self.image_vectors = {}
         self.idf = None
         self._load_vocabulary(vocabulary)
         self._word_counts = np.zeros(self.vocabulary_size, dtype='int')
 
     def add_image(self, key, descriptors_or_bow):
+        """Add image to the database
+
+        Parameters
+        ----------------
+        key : str
+            The key under which the image will be stored. Usually the filename.
+        descriptors_or_bow : array_like
+            If 1D it is treated as a single, precomputed BoW-vector.
+            If 2D it is treated as a set of feature descriptors, which will be bagged using the database vocabulary.
+        """
         if key in self.image_vectors:
             raise DatabaseError("Image '{}' is already in the database".format(key))
 
@@ -61,6 +109,7 @@ class BagOfWordsDatabase(collections.abc.MutableMapping):
 
     @property
     def vocabulary_size(self):
+        """Size of the vocabulary"""
         return self._voc_size()
 
     def _voc_size(self):
@@ -85,6 +134,17 @@ class BagOfWordsDatabase(collections.abc.MutableMapping):
             self.add_image(key, value)
 
     def query_descriptors(self, descriptors):
+        """Query the database by a set of descriptors
+
+        Parameters
+        ---------------
+        descriptors : array_like
+            NxD array of N descriptors of dimensionality D (which must match the database vocabulary)
+
+        Returns
+        --------------
+        Sorted list of database matches [(key1, distance1), (key2, distance2), ...] where distance1 < distance2.
+        """
         q_tf = self.bag(descriptors)
         q_tfidf = q_tf * self.idf
 
@@ -97,6 +157,18 @@ class BagOfWordsDatabase(collections.abc.MutableMapping):
         return sorted(matches, key=lambda x: x[1])
 
     def bag(self, descriptors):
+        """Create bag vector from descriptors
+
+        Parameters
+        ---------------
+        descriptors : array_like
+            NxD array of N descriptors of dimensionality D (which must match the database vocabulary)
+
+        Returns
+        --------------
+        v : array_like
+            K-dimensional vector of word frequencies, where K is the size of the vocabulary
+        """
         raise NotImplementedError(SUBCLASS_MESSAGE)
 
     def _load_vocabulary(self, vocabulary):
@@ -104,6 +176,7 @@ class BagOfWordsDatabase(collections.abc.MutableMapping):
 
     @classmethod
     def from_file(cls, database_file):
+        """Load database from file"""
         with h5py.File(database_file, 'r') as f:
             vocabulary = f['vocabulary']
             instance = cls(vocabulary)
@@ -117,7 +190,21 @@ class BagOfWordsDatabase(collections.abc.MutableMapping):
 
 
 class AnnDatabase(BagOfWordsDatabase):
+    """Approximate Nearest Neighbour database
+
+    Instead of computing the exact nearest neighbour, this database will return an approximate answer, but will be much
+    faster.
+
+    This implementation usses the annoy NN-library.
+    """
     def __init__(self, vocabulary):
+        """Initialize the database
+
+        Parameters
+        -------------
+        vocabulary : array_like
+            The vocabulary, a KxD array with K words/prototypes of dimensionality D.
+        """
         self.annoy_index = None
         self.n_trees = 20
         super().__init__(vocabulary)
@@ -144,7 +231,21 @@ class AnnDatabase(BagOfWordsDatabase):
 
 
 class SiftFeatureDatabase(QueryableDatabase, AnnDatabase):
+    """An ANN database for SIFT features"""
     def query_image(self, image, roi):
+        """Query using an image array and region of interest
+
+        Parameters
+        ---------------
+        image : np.ndarray
+            Image array
+        roi : array_like
+            Region of interest encoded as [x, y, width, height]
+
+        Returns
+        --------------
+        Sorted list of database matches [(key1, distance1), (key2, distance2), ...] where distance1 < distance2.
+        """
         descriptors, keypoints = calculate_sift(image, roi)
         return self.query_descriptors(descriptors)
 
@@ -162,7 +263,21 @@ class SiftFeatureDatabase(QueryableDatabase, AnnDatabase):
 
 
 class ColornamesFeatureDatabase(QueryableDatabase, AnnDatabase):
+    """An ANN database for color names features"""
     def query_image(self, image, roi):
+        """Query using an image array and region of interest
+
+            Parameters
+            ---------------
+            image : np.ndarray
+                Image array
+            roi : array_like
+                Region of interest encoded as [x, y, width, height]
+
+            Returns
+            --------------
+            Sorted list of database matches [(key1, distance1), (key2, distance2), ...] where distance1 < distance2.
+            """
         descriptors, keypoints = calculate_colornames(image, roi)
         return self.query_descriptors(descriptors)
 
@@ -180,6 +295,11 @@ class ColornamesFeatureDatabase(QueryableDatabase, AnnDatabase):
 
 
 class SiftColornamesWrapper(QueryableDatabase):
+    """A database that combines a SIFT and color names databse
+
+    For each query, both the SIFT and color names database will be queried.
+    The resulting matches are then sorted using the minimum of the SIFT and color names distance value.
+    """
     def __init__(self, sift_db, cname_db):
         self.sift_db = sift_db
         self.cname_db = cname_db
@@ -188,6 +308,7 @@ class SiftColornamesWrapper(QueryableDatabase):
 
     @classmethod
     def from_files(cls, sift_db_path, cname_db_path):
+        """Load the database from a SIFT and color names database"""
         sift_db = SiftFeatureDatabase.from_file(sift_db_path)
         cname_db = ColornamesFeatureDatabase.from_file(cname_db_path)
         instance = cls(sift_db, cname_db)
@@ -199,11 +320,25 @@ class SiftColornamesWrapper(QueryableDatabase):
         return self.combine_matches(sift_matches, cname_matches)
 
     def query_image(self, image, roi):
+        """Query using an image array and region of interest
+
+            Parameters
+            ---------------
+            image : np.ndarray
+                Image array
+            roi : array_like
+                Region of interest encoded as [x, y, width, height]
+
+            Returns
+            --------------
+            Sorted list of database matches [(key1, distance1), (key2, distance2), ...] where distance1 < distance2.
+            """
         sift_matches = dict(self.sift_db.query_image(image, roi))
         cname_matches = dict(self.cname_db.query_image(image, roi))
         return self.combine_matches(sift_matches, cname_matches)
 
     def combine_matches(self, sift_matches, cname_matches):
+        """Combine SIFT and colornames matches"""
         sift_matches = dict(sift_matches)
         cname_matches = dict(cname_matches)
         matches = [(key, min(sift_matches[key], cname_matches[key])) for key in sift_matches]
@@ -221,6 +356,7 @@ class SiftColornamesWrapper(QueryableDatabase):
 
 
 class DatabaseWithLocation(QueryableDatabase):
+    """A database that also contains location data"""
     def __init__(self, visualdb):
         super().__init__()
         self.visualdb = visualdb
@@ -244,6 +380,19 @@ class DatabaseWithLocation(QueryableDatabase):
         self.locations[key] = latlng
 
     def query_image(self, image, roi):
+        """Query using an image array and region of interest
+
+            Parameters
+            ---------------
+            image : np.ndarray
+                Image array
+            roi : array_like
+                Region of interest encoded as [x, y, width, height]
+
+            Returns
+            --------------
+            Sorted list of database matches [(key1, distance1), (key2, distance2), ...] where distance1 < distance2.
+            """
         visual_matches = self.visualdb.query_image(image, roi)
         matches = [(self[key], score) for key, score in visual_matches]
         return matches

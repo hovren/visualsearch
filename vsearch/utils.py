@@ -17,6 +17,24 @@ SUPPORTED_IMAGE_EXTENSIONS = ('.jpg', '.png')
 
 
 def load_descriptors_and_keypoints(path, *, descriptors=True, keypoints=True):
+    """Load a descriptor/keypoint file
+
+    Parameters
+    -------------
+    path : str
+        Path to descriptor file
+    descriptors : bool
+        Whether to load the descriptors
+    keypoints : bool
+        Whether to load the keypoints
+
+    Returns
+    ------------------
+    descriptors : array_like
+        NxD array of N descriptor vectors, or None if asked to not return any
+    keypoints : list
+        List of N cv2.Keypoint objects, or None if asked to not return any
+    """
     with h5py.File(path, 'r') as f:
         if descriptors:
             descriptors = f['descriptors'].value
@@ -40,6 +58,7 @@ def load_descriptors_and_keypoints(path, *, descriptors=True, keypoints=True):
 
 
 def save_keypoints_and_descriptors(path, kps, desc):
+    """Save keypoints and descriptors to a HDF5 file"""
     with h5py.File(path, 'w') as f:
         f['descriptors'] = np.vstack(desc)
         g = f.create_group('keypoints')
@@ -51,17 +70,36 @@ def save_keypoints_and_descriptors(path, kps, desc):
 
 
 def find_images(directory):
+    """Return list of full paths to images of a supported format in a directory"""
     return [os.path.join(directory, f) for f in os.listdir(directory)
             if os.path.splitext(f)[-1] in SUPPORTED_IMAGE_EXTENSIONS]
 
 
 def keypoint_inside_roi(kp, roi):
+    """Check whether a keypoint is within the region of interest
+
+    Parameters
+    -----------------
+    kp : cv2.Keypoint
+        Keypoint
+    roi : array_like
+        An optional region of interest encoded as (x, y, width, height)
+
+    Returns:
+        True if keypoint.pt is within the ROI
+    """
     rx, ry, rw, rh = roi
     x, y = kp.pt
     return (rx <= x <= rx + rw) and (ry <= y <= ry + rh)
 
 
 def filter_roi(des, kps, roi):
+    """Filter a list of keypoints and descriptors to only those within the region of interest
+
+    Parameters
+    -------------------
+
+    """
     valid = [i for i, kp in enumerate(kps) if keypoint_inside_roi(kp, roi)]
     kps = [kp for i, kp in enumerate(kps) if i in valid]
     des = des[valid]

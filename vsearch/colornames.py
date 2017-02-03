@@ -16,9 +16,25 @@ COLOR_RGB = [[0, 0, 0] , [0, 0, 1], [.5, .4, .25] , [.5, .5, .5] , [0, 1, 0] , [
 COLORNAMES_TABLE_PATH = os.path.join(os.path.dirname(__file__), 'colornames_w2c.mat')
 COLORNAMES_TABLE = scipy.io.loadmat(COLORNAMES_TABLE_PATH)['w2c']
 
-def colornames_image(im, mode='index'):
-    im = im.astype('double')
-    idx = np.floor(im[..., 0] / 8) + 32 * np.floor(im[..., 1] / 8) + 32 * 32 * np.floor(im[..., 2] / 8)
+def colornames_image(image, mode='index'):
+    """Apply color names to an image
+
+    Parameters
+    --------------
+    image : array_like
+        The input image array (RxC)
+    mode : str
+        If 'index' then it returns an image where each element is the corresponding color name label.
+        If 'probability', then teh returned image has size RxCx11 where the last dimension are the probabilites for each
+        color label.
+        The corresponding human readable name of each label is found in the `COLOR_NAMES` list.
+
+    Returns
+    --------------
+    Color names encoded image, as explained by the `mode` parameter.
+    """
+    image = image.astype('double')
+    idx = np.floor(image[..., 0] / 8) + 32 * np.floor(image[..., 1] / 8) + 32 * 32 * np.floor(image[..., 2] / 8)
     m = COLORNAMES_TABLE[idx.astype('int')]
 
     if mode == 'index':
@@ -30,12 +46,33 @@ def colornames_image(im, mode='index'):
 
 
 def cname_file_for_image(path):
+    """Return color names descriptor filename corresponding to an image path"""
     root, _ = os.path.splitext(path)
     cname_file = os.path.join(root + '.cname.h5')
     return cname_file
 
 
 def calculate_colornames(image, roi=None, keypoints=None):
+    """Calculate SIFT descriptors and/or keypoints
+
+    Parameters
+    --------------
+    image : array_like
+        The input image array
+    roi : array_like
+        An optional region of interest encoded as (x, y, width, height)
+        If None, then the whole image is used
+    keypoints : list
+        List of keypoints for which to compute the color names descriptors.
+        If None, then SIFT keypoints for the image will be computed.
+
+    Returns
+    -------------
+    descriptors :  array_like
+        NxD array containing the N D-dimensional descriptor vectors
+    keypoints : list
+        List of N cv2.Keypoint objects
+        """
     if not keypoints:
         _, keypoints = calculate_sift(image, only_keypoints=True)
 

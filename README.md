@@ -18,6 +18,7 @@ The dependencies of this package are
 - opencv
 - scipy
 - h5py
+- tqdm
 - sklearn (only for database creation)
 
 After meeting the above requirements the `vsearch` python library, and the scripts can be installed

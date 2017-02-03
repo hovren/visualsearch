@@ -6,11 +6,21 @@
 Welcome to Visual Search tool's documentation!
 ==============================================
 
-Contents:
-
+Usage
+------------------
 .. toctree::
+   :glob:
    :maxdepth: 2
 
+   usage/*
+
+Programming API
+-------------------
+.. toctree::
+   :glob:
+   :maxdepth: 2
+
+   vsearch/*
 
 
 Indices and tables
