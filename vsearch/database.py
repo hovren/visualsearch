@@ -18,10 +18,37 @@ def cos_distance(x, y):
 
 
 class DatabaseError(Exception):
+    """Error raised on database errors"""
     pass
 
+
 LatLng = collections.namedtuple('LatLng', 'lat lng')
+"""Tuple for locations in the form of a latitude and longitude
+
+.. py:attribute:: lat
+
+    Latitude
+
+.. py:attribute:: lng
+
+    Longitude
+"""
+
 DatabaseEntry = collections.namedtuple('DatabaseEntry', ['key', 'bow', 'latlng'])
+"""Tuple for database entries
+
+.. py:attribute:: key
+
+    The database key. Usually the filename.
+
+.. py:attribute:: bow
+
+    Bag of Words vector (raw word frequency)
+
+.. py:attribute:: latlng
+
+    Location in the form of a :class:`.LatLng` object.
+"""
 
 SUBCLASS_MESSAGE = "Please use one of the subclasses"
 
@@ -250,6 +277,19 @@ class SiftFeatureDatabase(QueryableDatabase, AnnDatabase):
         return self.query_descriptors(descriptors)
 
     def query_path(self, path, roi):
+        """Query using an image path and region of interest
+
+        Parameters
+        ---------------
+        path : str
+            Path to the query image
+        roi : array_like
+            Region of interest encoded as [x, y, width, height]
+
+        Returns
+        --------------
+        Sorted list of database matches [(key1, distance1), (key2, distance2), ...] where distance1 < distance2.
+        """
         sift_file = sift_file_for_image(path)
         if os.path.exists(sift_file):
             print('Loading SIFT features from', sift_file)
@@ -282,6 +322,19 @@ class ColornamesFeatureDatabase(QueryableDatabase, AnnDatabase):
         return self.query_descriptors(descriptors)
 
     def query_path(self, path, roi):
+        """Query using an image path and region of interest
+
+        Parameters
+        ---------------
+        path : str
+            Path to the query image
+        roi : array_like
+            Region of interest encoded as [x, y, width, height]
+
+        Returns
+        --------------
+        Sorted list of database matches [(key1, distance1), (key2, distance2), ...] where distance1 < distance2.
+        """
         cname_file = cname_file_for_image(path)
         if os.path.exists(cname_file):
             print('Loading Colorname features from', cname_file)
@@ -315,6 +368,19 @@ class SiftColornamesWrapper(QueryableDatabase):
         return instance
 
     def query_path(self, path, roi):
+        """Query using an image path and region of interest
+
+        Parameters
+        ---------------
+        path : str
+            Path to the query image
+        roi : array_like
+            Region of interest encoded as [x, y, width, height]
+
+        Returns
+        --------------
+        Sorted list of database matches [(key1, distance1), (key2, distance2), ...] where distance1 < distance2.
+        """
         sift_matches = dict(self.sift_db.query_path(path, roi))
         cname_matches = dict(self.cname_db.query_path(path, roi))
         return self.combine_matches(sift_matches, cname_matches)
@@ -382,22 +448,35 @@ class DatabaseWithLocation(QueryableDatabase):
     def query_image(self, image, roi):
         """Query using an image array and region of interest
 
-            Parameters
-            ---------------
-            image : np.ndarray
-                Image array
-            roi : array_like
-                Region of interest encoded as [x, y, width, height]
+        Parameters
+        ---------------
+        image : np.ndarray
+            Image array
+        roi : array_like
+            Region of interest encoded as [x, y, width, height]
 
-            Returns
-            --------------
-            Sorted list of database matches [(key1, distance1), (key2, distance2), ...] where distance1 < distance2.
-            """
+        Returns
+        --------------
+        Sorted list of database matches [(entry1, distance1), (entry2, distance2), ...] where distance1 < distance2 and entryX are :class:`DatabaseEntry` instances.
+        """
         visual_matches = self.visualdb.query_image(image, roi)
         matches = [(self[key], score) for key, score in visual_matches]
         return matches
 
     def query_path(self, path, roi):
+        """Query using an image path and region of interest
+
+        Parameters
+        ---------------
+        path : str
+            Path to the query image
+        roi : array_like
+            Region of interest encoded as [x, y, width, height]
+
+        Returns
+        --------------
+        Sorted list of database matches [(entry1, distance1), (entry2, distance2), ...] where distance1 < distance2 and entryX are :class:`DatabaseEntry` instances.
+        """
         visual_matches = self.visualdb.query_path(path, roi)
         matches = [(self[key], score) for key, score in visual_matches]
         return matches

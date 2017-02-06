@@ -7,3 +7,4 @@ test_images/
 vsearch.egg-info/
 vsearch/__pycache__/
 vsearch/gui/__pycache__/
+docs/_build

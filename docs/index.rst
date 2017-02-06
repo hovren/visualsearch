@@ -6,13 +6,19 @@
 Welcome to Visual Search tool's documentation!
 ==============================================
 
+The visual search tool is meant to help finding some object, like a person,
+in a database of images.
+It achieves this by using a technique known as *Bag of Words*.
+
+This tool was developed with support from the `Visual Sweden <http://visualsweden.se>`_ initiative.
+
 Usage
 ------------------
 .. toctree::
-   :glob:
    :maxdepth: 2
 
-   usage/*
+   usage/query_gui
+   usage/create
 
 Programming API
 -------------------

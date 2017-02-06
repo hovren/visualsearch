@@ -25,7 +25,7 @@ def colornames_image(image, mode='index'):
         The input image array (RxC)
     mode : str
         If 'index' then it returns an image where each element is the corresponding color name label.
-        If 'probability', then teh returned image has size RxCx11 where the last dimension are the probabilites for each
+        If 'probability', then the returned image has size RxCx11 where the last dimension are the probabilities for each
         color label.
         The corresponding human readable name of each label is found in the `COLOR_NAMES` list.
 
@@ -53,7 +53,12 @@ def cname_file_for_image(path):
 
 
 def calculate_colornames(image, roi=None, keypoints=None):
-    """Calculate SIFT descriptors and/or keypoints
+    """Calculate colornames descriptors and/or keypoints
+
+    For color names we still use SIFT to detect keypoints.
+    For each keypoint we use a radius that is twice that of the corresponding SIFT feature,
+    and calculate a histogram of color name probabilities within this region.
+    The histogram is then normalized to not depend on the chosen radius.
 
     Parameters
     --------------
