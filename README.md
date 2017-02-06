@@ -91,11 +91,21 @@ We use two databases, one using SIFT, and the other color names features.
 During runtime, both databases are queried and the matches are sorted using the
 smaller of the two distances.
 
+## Known issues
+- Requires Internet connection to download map tiles and load the map javascript libraries.
+- Currently uses map tiles from the Open Streetmap Project, which is not advisable for heavy use.
+Please see the Open Streetmap Tile Policy for guidance.
+- The GUI app is hardcoded to launch the map view at Norrköping, Sweden.
+If you use a database from somewhere else please update the starting location.
+An even better solution would be to look at the database entries and dynamically
+change location.
+- All database entries must have a location set, or querying is likely to misbehave
+or simply crash.
+
 ## License
-All code is licensed under the GPLv3 and copyright Hannes Ovrén.
+All code is licensed under the GPLv3, copyright Hannes Ovrén.
  
 ## Acknowledgements
 - This work was funded by [Visual Sweden](http://www.visualsweden.se/)
 - The color names lookup table was taken from the homepage of 
 [Joost van de Weijer](http://lear.inrialpes.fr/people/vandeweijer/)
- 

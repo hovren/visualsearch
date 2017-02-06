@@ -12,6 +12,23 @@ It achieves this by using a technique known as *Bag of Words*.
 
 This tool was developed with support from the `Visual Sweden <http://visualsweden.se>`_ initiative.
 
+Installation
+------------------
+The dependencies of this package are
+
+- python 3.4+
+- annoy
+- opencv
+- scipy
+- h5py
+- tqdm (only for database creation)
+- sklearn (only for database creation)
+
+After meeting the above requirements the `vsearch` python library, and the scripts can be installed
+by running::
+
+     python3 setup.py install
+
 Usage
 ------------------
 .. toctree::
