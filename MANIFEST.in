@@ -1,3 +1,5 @@
 include vsearch/colornames_w2c.mat
 include vsearch/gui/map.html
 include vsearch/gui/map.js
+include README.md
+include LICENSE
