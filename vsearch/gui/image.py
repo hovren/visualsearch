@@ -1,5 +1,3 @@
-from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, \
-    QSizePolicy, QGraphicsView, QGraphicsScene, QRubberBand, QDialog, QDialogButtonBox, QDialogButtonBox, QErrorMessage, QProgressDialog
 # Copyright 2017 Hannes Ovrén
 #
 # This file is part of vsearch.
@@ -17,12 +15,13 @@ from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QVBoxLayout, QHB
 # You should have received a copy of the GNU General Public License
 # along with vsearch.  If not, see <http://www.gnu.org/licenses/>.
 
+from PyQt5.QtWidgets import QLabel, QSizePolicy, QRubberBand
 from PyQt5.QtGui import QImage, QPixmap
-from PyQt5 import QtCore, Qt, QtGui
-from PyQt5.Qt import QSize, QRect, QRectF, QPoint, QPointF, QThread, pyqtSignal, pyqtSlot
-from PyQt5.QtWebKitWidgets import QWebView
+from PyQt5 import QtCore
+from PyQt5.Qt import QSize, QRect, QRectF, QPoint, QPointF
 
 import numpy as np
+
 
 class ImageWidget(QLabel):
     def __init__(self, parent=None):
@@ -85,6 +84,7 @@ class ImageWidget(QLabel):
             return widget_point.toPoint()
         else:
             return QPoint()
+
 
 class ImageWithROI(ImageWidget):
     def __init__(self, parent=None):
