@@ -12,6 +12,8 @@ It achieves this by using a technique known as *Bag of Words*.
 
 This tool was developed with support from the `Visual Sweden <http://visualsweden.se>`_ initiative.
 
+The source repository for this project is hosted on `Github <https://github.com/hovren/visualsearch>`_.
+
 Installation
 ------------------
 The dependencies of this package are

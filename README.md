@@ -11,6 +11,8 @@ This package is made up from three parts:
 - Scripts for creating BoF-vocabularies and databases
 - A library for querying BoF databases
 
+The source repository for this project is hosted on [Github](https://github.com/hovren/visualsearch)
+
 ## Installation
 The dependencies of this package are
 - python 3.4+
