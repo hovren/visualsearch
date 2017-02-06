@@ -1,5 +1,22 @@
 from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, \
     QSizePolicy, QGraphicsView, QGraphicsScene, QRubberBand, QDialog, QDialogButtonBox, QDialogButtonBox, QErrorMessage, QProgressDialog
+# Copyright 2017 Hannes Ovrén
+#
+# This file is part of vsearch.
+#
+# vsearch is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# vsearch is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with vsearch.  If not, see <http://www.gnu.org/licenses/>.
+
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5 import QtCore, Qt, QtGui
 from PyQt5.Qt import QSize, QRect, QRectF, QPoint, QPointF, QThread, pyqtSignal, pyqtSlot
