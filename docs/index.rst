@@ -10,7 +10,7 @@ The visual search tool is meant to help finding some object, like a person,
 in a database of images.
 It achieves this by using a technique known as *Bag of Words*.
 
-This tool was developed with support from the `Visual Sweden <http://visualsweden.se>`_ initiative.
+This tool was developed within the `Visual Sweden <http://visualsweden.se>`_ initiative.
 
 The source repository for this project is hosted on `Github <https://github.com/hovren/visualsearch>`_.
 
@@ -23,6 +23,7 @@ The dependencies of this package are
 - opencv
 - scipy
 - h5py
+- PyQt5
 - tqdm (only for database creation)
 - sklearn (only for database creation)
 
@@ -30,6 +31,9 @@ After meeting the above requirements the `vsearch` python library, and the scrip
 by running::
 
      python3 setup.py install
+
+Both library and GUI should work on all platforms on which its dependencies are satisfied,
+but has until now only been tested on 64-bit Linux (Fedora 25) using the Anaconda Python distribution.
 
 Usage
 ------------------

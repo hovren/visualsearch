@@ -30,7 +30,14 @@ from vsearch.sift import sift_file_for_image, calculate_sift
 
 
 def cos_distance(x, y):
-    "The cosine angle distance between two vectors of equal size"
+    """"The cosine angle distance between two vectors of equal size
+
+    Formally this is defined as
+
+        d = 1 - c
+
+    where c is the cosine angle beween the two vectors.
+    """
     return 1 - np.dot(x / np.linalg.norm(x), y / np.linalg.norm(y))
 
 

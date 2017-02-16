@@ -71,5 +71,5 @@ To make the query from the query dialog do the following
 
 Similarity
 ^^^^^^^^^^^^^^^
-The similarity score is simply ``1 - distance`` where ``distance`` is cosine angle distance between BoF-vectors.
+The similarity score is the cosine angle between two bag of words vectors.
 

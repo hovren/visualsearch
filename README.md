@@ -20,14 +20,18 @@ The dependencies of this package are
 - opencv
 - scipy
 - h5py
-- tqdm
+- PyQt5
+- tqdm (only for database creation)
 - sklearn (only for database creation)
 
 After meeting the above requirements the `vsearch` python library, and the scripts can be installed
 by running
 
     $ python3 setup.py install
-    
+
+Both library and GUI should work on all platforms on which its dependencies are satisfied,
+but has until now only been tested on 64-bit Linux (Fedora 25) using the Anaconda Python distribution.
+
 ## Running the GUI tool
 The GUI tool is launched by calling
 
